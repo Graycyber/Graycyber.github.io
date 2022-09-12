@@ -1,18 +1,27 @@
 - so i fuzz for page parameters using ffuf like `ffuf -w /home/usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt:FUZZ -c -u http://wlem5p6v4r2sxvg1rndvjlluezy4l2z7xkxdcmz5-web.cybertalentslabs.com/InSiDe.php?FUZZ=anything -fw 9,23` and got the src
-![](gнαZe_assets/Pasted%20image%2020220817145152.png)
+
+
+![](/assets/gнαZe_assets/Pasted%20image%2020220817145152.png)
+
 - then going to the site at http://wlem5p6v4r2sxvg1rndvjlluezy4l2z7xkxdcmz5-web.cybertalentslabs.com/InSiDe.php?src=anything
 i got some code
-![](gнαZe_assets/Pasted%20image%2020220817150056.png)
+
+![](/assets/gнαZe_assets/Pasted%20image%2020220817150056.png)
+
 - looking at the first one which is 
+
 ```php
 if(strcmp($_GET['flag'],"View")==0)  
 {  
     echo "<br/><h1>You Pass The Stage 1 The Flag Is  </h1><br/>";  
     echo "<h1>$flag1";
 ```
+
 the strcmp function that compares 2 strings, if they are equal is returns 0 (meaning 0 difference), so its saying if the value of the `flag` parameter is not different(same as) the string "View" then echo the flag1
 - for flag1, we then insert the flag=View like http://wlem5p6v4r2sxvg1rndvjlluezy4l2z7xkxdcmz5-web.cybertalentslabs.com/InSiDe.php?flag=View and we get the first part of the flag as Flag: Flag{Arju!n_
-![](gнαZe_assets/Pasted%20image%2020220817151333.png)
+
+![](/assets/gнαZe_assets/Pasted%20image%2020220817151333.png)
+
 - for the second part
 ```php
 if (isset($_COOKIE['kk']) &&  isset($_COOKIE['cc']))  
@@ -29,9 +38,12 @@ if (isset($_COOKIE['kk']) &&  isset($_COOKIE['cc']))
  }
 ```
 we have 2 cookies kk and cc that are set and there values aren't equal but the values of their MD5 hash are the same, so we will use this resource at [https://github.com/spaze/hashes/blob/master/md5.md](https://github.com/spaze/hashes/blob/master/md5.md) and use the words QNKCDZO and QLTHNDT as values of our kk and cc cookies. PHP interprets every hash starting with `0e `as 0 cause its like 0 exponential that value which is always 0 and so cc and kk are equal because of this and because loose comparison(`==`) is used, these hashes that start 0e are known as magic hashes
-![](gнαZe_assets/Pasted%20image%2020220817153412.png)
+
+![](/assets/gнαZe_assets/Pasted%20image%2020220817153412.png)
+
 and we get the second part of the flag as Flag :Md5_ll_
-![](gнαZe_assets/Pasted%20image%2020220817153447.png)
+
+![](/assets/gнαZe_assets/Pasted%20image%2020220817153447.png)
 - looking at the 3rd part of the code
 ```php
 $useragent = $_SERVER['HTTP_USER_AGENT'];  
@@ -56,7 +68,10 @@ $useragent = $_SERVER['HTTP_USER_AGENT'];
  - then we will check if the numeric string is greater than 10000
  - the value that will meet this numeric requirement is 9e9 which is 9 exponential 9 in php
  - so we will send a request like
-![](gнαZe_assets/Pasted%20image%2020220817161206.png)
+
+![](/assets/gнαZe_assets/Pasted%20image%2020220817161206.png)
 and get the 3rd part of the flag Exp0oNential_Ar3_GOod_!}
-![](gнαZe_assets/Pasted%20image%2020220817161305.png)
+
+![](/assets/gнαZe_assets/Pasted%20image%2020220817161305.png)
+
 - so the whole flag is Flag{Arju!n_Md5_ll_Exp0oNential_Ar3_GOod_!}
