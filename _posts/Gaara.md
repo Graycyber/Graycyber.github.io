@@ -1,0 +1,43 @@
+---
+tags: ssh, hydra, gbd
+---
+### Offsec PG: Gaara Writeup
+#### Enumeration
+- so I firstly go to the main page to inspect it but we get nothing useful
+![](Gaara_assets/Pasted%20image%2020220926091218.png)
+- then i run an nmap scan with the syntax `nmap -sV -sC -T4 192.168.70.142 ` to discover open ports ad also get some version information
+![](Gaara_assets/Pasted%20image%2020220926071009.png)
+- then i also run a directory scan using fffuf with the syntax `ffuf -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt:FUZZ -u http://192.168.70.142/FUZZ`
+![](Gaara_assets/Pasted%20image%2020220926073736.png)
+- so i then go to the Cryoserver that was discovered in the scan and then i get just the names of 3 directories /Temari, /Kazekage, /iamGaara
+![](Gaara_assets/Pasted%20image%2020220926073811.png)
+- going to each of this pages, i discover its discussing about the storyline of Gaara in the Naruto anime series. lol, hello to all my anime lovers :)
+![](Gaara_assets/Pasted%20image%2020220926092047.png)
+- so i decide to download each of this pages to extract information
+- then checking the differences between the files using the `diff` command i discover that the Temari and Kazekage text files are the same but the iamgaara file is different
+- so i then check for the unique words in iamgaara file and put the output in a file gaara_words using the command `grep -o -E '\w+' iamGaara.txt | sort -u -f > gaara_words`
+- then i also do the same for the Kazekage.txt file, `grep -o -E '\w+' Kazekage.txt | sort -u -f > K_words `
+- viewing the difference between the 2 files using `diff gaara_words K_words`, i discover a text that looks weird in the garra_words file, which is f1MgN9mTf9SNbzRygcU
+![](Gaara_assets/Pasted%20image%2020220926092618.png)
+- placing this in cyber chef, it is a base58 encoded text which gave the output gaara:ismyname
+![](Gaara_assets/Pasted%20image%2020220926082711.png)
+
+#### Foothold
+- so trying the credentials gaara:ismyname, we see that does not work
+![](Gaara_assets/Pasted%20image%2020220926083415.png)
+- but now we have a username which is gaara, we can then bruteforce for a password using hydra `hydra -l gaara -P /usr/share/wordlists/rockyou.txt ssh://192.168.70.142/ -t 4 -V`
+![](Gaara_assets/Pasted%20image%2020220926084436.png)
+and we get a password iloveyou2
+- trying the password obtained we will see that we have gotten foothold and we get the flag in the home directory in local.txt file
+![](Gaara_assets/Pasted%20image%2020220926084422.png)
+
+#### Privilege Escalation
+- i run the `id` command to see the groups we are in and also check for SUID files using `find / -perm /4000 2>/dev/null `
+![](Gaara_assets/Pasted%20image%2020220926084730.png)
+- looking at our linpeas.sh output, we can see the gdb binary that has SUID privileges as an escalation vector
+![](Gaara_assets/Pasted%20image%2020220926090109.png)
+- then looking at gtfobins we are able to see we can elevate privileges
+![](Gaara_assets/Pasted%20image%2020220926085533.png)
+- so i run `/usr/bin/gdb -nx -ex 'python import os; os.execl("/bin/sh", "sh", "-p")' -ex quit` to exploit this binary
+- and then i get root access and the root flag is in the root directory in the proof.txt file
+![](Gaara_assets/Pasted%20image%2020220926085658.png)
