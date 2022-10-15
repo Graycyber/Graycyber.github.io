@@ -7,45 +7,76 @@ tags: lxd, ftp, hashcat, zip2john, john, rbash
 
 #### Enumeration
 - I firstly go the page and its a regular Apache default page, so I scan for open ports and services `nmap -sV -sC -T4 192.168.243.107`
-![](FunboxRookie_assets/Pasted%20image%2020221015163311.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015163311.png)
+
 - then i scan for directories using ffuf `ffuf -w /usr/share/seclists/Discovery/Web-Content/directory-list-lowercase-2.3-medium.txt -u http://192.168.243.107/FUZZ` but i find none
-![](FunboxRookie_assets/Pasted%20image%2020221015170447.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015170447.png)
 - from the the nmap scan i see that i can access the FTP server via anonymous login, then notice some zip files
-![](FunboxRookie_assets/Pasted%20image%2020221015163607.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015163607.png)
+
 - i download these zip files using `mget *.zip`  and `get welcome.msg` to get all the zip files from ftp
-![](FunboxRookie_assets/Pasted%20image%2020221015191731.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191731.png)
+
 - viewing the welcome.msg but do not get any useful information
-![](FunboxRookie_assets/Pasted%20image%2020221015191746.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191746.png)
+
 - viewing the robots.txt directory and i see the logs directory
-![](FunboxRookie_assets/Pasted%20image%2020221015164856.png)\
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015164856.png)
+
 - then going to the logs directory, we will get a 404 error
-![](FunboxRookie_assets/Pasted%20image%2020221015191526.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191526.png)
+
 - so see i don't have the password for any of the zip files, i firstly convert the zip files into hashes and save them in a file `zip2john anna.zip  ariel.zip  bud.zip  cathrine.zip  homer.zip  jessica.zip  john.zip  marge.zip  miriam.zip  tom.zip  zlatan.zip >> hashes`
-![](FunboxRookie_assets/Pasted%20image%2020221015172543.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015172543.png)
+
 - i then use john to crack the hashes `john hashes ` and i got the password for 2 zip files which are cathrine.zip and tom.zip
-![](FunboxRookie_assets/Pasted%20image%2020221015172647.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015172647.png)
+
  - I also used hashcat to crack the hashes following this video [https://www.youtube.com/watch?v=IHoH05IMBe4](https://www.youtube.com/watch?v=IHoH05IMBe4) using  the syntax` hashcat -a 0 -m 17200 hashes.txt /usr/share/wordlists/rockyou.txt`
-![](FunboxRookie_assets/Pasted%20image%2020221015175501.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015175501.png)
+
 -  so i then open the zip files using `7z x tom.zip` and enter the password as iubire and `7z x cathrine.zip ` with the password as catwoman and get the id_rsa files
 #### Foothold
 - I tried to ssh to cathrine user with the identity file but the connection gets closed
-  ![](FunboxRookie_assets/Pasted%20image%2020221015191417.png)
+
+  ![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191417.png)
+  
 - i tried accessing tom and it worked  `ssh tom@192.168.237.107 -i tom_id_rsa` so i got foothold
-  ![](FunboxRookie_assets/Pasted%20image%2020221015182445.png)
+
+  ![](/assets/FunboxRookie_assets/Pasted%20image%2020221015182445.png)
+  
 - i found the first flag in the home directory
-![](FunboxRookie_assets/Pasted%20image%2020221015183247.png)
+
+![](/assets//assets/FunboxRookie_assets/Pasted%20image%2020221015183247.png)
+
 #### Privilege Escalation
 - so i tried searching for SUID files but i realised i was in a restricted shell
-![](FunboxRookie_assets/Pasted%20image%2020221015182700.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015182700.png)
+
 - so using running `vi local.txt` and running the commands bellow, i break out of the shell
 ```text
 :set shell=/bin/bash
 :shell
 ```
-![](FunboxRookie_assets/Pasted%20image%2020221015182927.png)
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015182927.png)
+
 - I ran linpeas script to check for privilege escalation vectors and saw that the current user is part of the sudo group and lxd group, i then verified bye running the id command
-![](FunboxRookie_assets/Pasted%20image%2020221015191258.png)
-![](FunboxRookie_assets/Pasted%20image%2020221015191152.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191258.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191152.png)
+
 - since i don't have the password of the current user i can't run the sudo command to escalate privileges, so i focus on the lxd group instead
 - following the guide in this link, i was able to exploit the lxd group ang gain root access
 [https://www.hackingarticles.in/lxd-privilege-escalation/](https://www.hackingarticles.in/lxd-privilege-escalation/)
@@ -67,7 +98,11 @@ tags: lxd, ftp, hashcat, zip2john, john, rbash
 - lxc exec ignite /bin/sh
 ```
 - and i finally get root access
-![](FunboxRookie_assets/Pasted%20image%2020221015190520.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015190520.png)
 - then going to the `/mnt/root/root` directory i was able to get the root flag
-![](FunboxRookie_assets/Pasted%20image%2020221015191057.png)
+
+![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191057.png)
+
+Thanks for reading my writeup, see you next time :).
 
