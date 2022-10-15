@@ -78,7 +78,7 @@ tags: lxd, ftp, hashcat, zip2john, john, rbash
 ![](/assets/FunboxRookie_assets/Pasted%20image%2020221015191152.png)
 
 - since i don't have the password of the current user i can't run the sudo command to escalate privileges, so i focus on the lxd group instead
-- following the guide in this link, i was able to exploit the lxd group ang gain root access
+- following the guide in this link, i was able to exploit the lxd group and gain root access
 [https://www.hackingarticles.in/lxd-privilege-escalation/](https://www.hackingarticles.in/lxd-privilege-escalation/)
 - so on my attack machine, i ran the following commands
 ```text
