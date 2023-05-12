@@ -61,7 +61,7 @@ Discovered open port 22/tcp on 10.10.121.146
 
 ![](assets/Psychobreak_assets/Pasted%20image%2020230421134740.png)
 
-![](Psychobreak_assets/Pasted%20image%2020230421134845.png)
+![](assets/Psychobreak_assets/Pasted%20image%2020230421134845.png)
 
 - now the clue we get is this piece of text Tizmg_nv_zxxvhh_gl_gsv_nzk_kovzhv
 
