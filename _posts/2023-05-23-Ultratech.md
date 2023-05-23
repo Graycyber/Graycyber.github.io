@@ -24,6 +24,7 @@ Discovered open port 31331/tcp on 10.10.186.176
 Discovered open port 22/tcp on 10.10.186.176         
 ```
 - then we go ahead to identify the services running on the ports using Nmap
+
 ```shell
 ┌──(kali㉿kali)-[~]
 └─$ nmap -sV -sC -A -p31331 10.10.186.176
@@ -117,6 +118,7 @@ Nmap done: 1 IP address (1 host up) scanned in 42.97 seconds
 ![](assets/Ultratech_assets/Pasted%20image%2020230522153011.png)
 
 - if we try to test that ping functionality we saw earlier in the api.js source file, we can that it actually works
+
 ## Exploitation
 - we also specify a count for the ping command and see that it also runs, so what if we can find a way to exploit an RCE using this functionality??
 
