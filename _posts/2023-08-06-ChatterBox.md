@@ -1,3 +1,7 @@
+---
+tags: achat, icacls, BoF
+---
+
 # HTB: ChatterBox
 
 ***Overview**: ChatterBox is a HTB windows box rated as medium, this box exploits the existence of Remote Buffer overflow vulnerability on a  service known as AChat chat system running on the machine to gain foothold. Then escalates privileges using reuse of credentials. This machine also has a little twist of changing permissions to view a sensitive file (root.txt) without administrative access. I really hope you enjoy this writeup, thanks for stopping by :)*
