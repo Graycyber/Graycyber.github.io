@@ -496,7 +496,7 @@ Tomcat listens on **port 8080 for HTTP, port 8443 for https** and **port 8009
 ![](assets/Authority_assets/Pasted%20image%2020230818070930.png)
 
 ##### A Bit of Research
-- Searching what PWM is, we saw that [PWM]([pwm-project/pwm: pwm (github.com)](https://github.com/pwm-project/pwm)) is an open source  password self-service application for LDAP directories
+- Searching what PWM is, we saw that [pwm-project/pwm: pwm (github.com)](https://github.com/pwm-project/pwm) is an open source  password self-service application for LDAP directories
 - Researching further, on the page [Automate password resets with PWM | Opensource.com](https://opensource.com/article/19/4/automate-password-resets-pwm), it stated that 
 > [PWM](https://github.com/pwm-project/pwm) is an open source application that provides a webpage where users can submit their own password resets.
 >  If certain conditions are met, which you can configure, PWM will send a password reset instruction to whichever directory service you've connected it to.
