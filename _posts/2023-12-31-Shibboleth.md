@@ -286,7 +286,4 @@ Unable to load the "PHP Email Form" Library!
 ![](assets/Shibboleth_assets/Pasted%20image%2020231130055203.png)
 
 ![](assets/Shibboleth_assets/Pasted%20image%2020231130055251.png)
-FlexStart - v1.2.0
 
-![](assets/Shibboleth_assets/Pasted%20image%2020231130061407.png)
-![](assets/Shibboleth_assets/Pasted%20image%2020231130061539.png)
